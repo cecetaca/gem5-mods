@@ -60,7 +60,7 @@ BitUnion64(ExtMachInst)
     Bitfield<61>        compressed;
     Bitfield<60>        enable_zcd;
     // More bits for vector extension
-    Bitfield<57, 41>    vl;     // [0, 2**16]
+    Bitfield<58, 41>    vl;     // [0, 2**17]
     Bitfield<40>        vill;
     SubBitUnion(vtype8, 39, 32) // exclude vill
         Bitfield<39> vma;
@@ -185,7 +185,11 @@ BitUnion64(ExtMachInst)
 
 EndBitUnion(ExtMachInst)
 
-constexpr unsigned MaxVecLenInBits = 65536;
+// Raised from 65536 so an offloaded vector unit can be configured with
+// registers large enough for 2**17 32-bit elements at LMUL=8. This sizes
+// gem5's own VecRegContainer, so it costs memory in the physical
+// register file even when the vector state actually lives elsewhere.
+constexpr unsigned MaxVecLenInBits = 524288;
 constexpr unsigned MaxVecLenInBytes  = MaxVecLenInBits >> 3;
 
 

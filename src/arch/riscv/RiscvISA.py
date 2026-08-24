@@ -50,7 +50,7 @@ from m5.params import (
 
 class RiscvVectorLength(UInt32):
     min = 8
-    max = 65536
+    max = 524288
 
     def _check(self):
         super()._check()

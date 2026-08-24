@@ -42,8 +42,8 @@ struct VecOffloadRecord
     uint8_t vlmul = 0;       // vtype encoding (3 bits, fractional incl.)
     uint8_t vta = 0;
     uint8_t vma = 0;
-    uint16_t vl = 0;
-    uint16_t vstart = 0;     // phase 1: always 0, still carried
+    uint32_t vl = 0;         // up to 2**17 elements (LMUL=8, VLEN=512Ki)
+    uint32_t vstart = 0;     // phase 1: always 0, still carried
     // scalar operand value (.vx/.vf forms), read at execute
     uint64_t scalar = 0;
 };
