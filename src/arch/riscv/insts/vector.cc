@@ -1292,6 +1292,8 @@ StaticInstPtr
 makeVecOffloadMemMicroop(ExtMachInst emi, const char *mnem, uint32_t elen,
                          uint32_t vlen, bool isStore, bool isStrided)
 {
+    panic_if(!emi.vm, "%s: masked vector memory ops are unsupported with "
+             "vector_offload until the ACT-owned VLSU (phase 2)", mnem);
     return new VecOffloadMemMicroInst(emi, mnem, elen, vlen, isStore,
                                       isStrided);
 }
