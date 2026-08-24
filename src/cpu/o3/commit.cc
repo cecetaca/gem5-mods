@@ -1130,17 +1130,20 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                 "at the head of the ROB, PC %s.\n",
                 tid, head_inst->seqNum, head_inst->pcState());
 
-        if (head_inst->staticInst->commitBlocked(head_inst->seqNum,
-                                                  cpu->tcBase(tid))) {
-            // e.g. waiting on an external co-simulated unit's response
-            return false;
-        }
-
         if (inst_num > 0 || iewStage->hasStoresToWB(tid)) {
             DPRINTF(Commit,
                     "[tid:%i] [sn:%llu] "
                     "Waiting for all stores to writeback.\n",
                     tid, head_inst->seqNum);
+            return false;
+        }
+
+        // Polled only once older stores have fully drained: the first
+        // poll may start an external-unit access, which must not race
+        // older stores still in flight to the caches.
+        if (head_inst->staticInst->commitBlocked(head_inst->seqNum,
+                                                  cpu->tcBase(tid))) {
+            // e.g. waiting on an external co-simulated unit's response
             return false;
         }
 
