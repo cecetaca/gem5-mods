@@ -1264,9 +1264,23 @@ VecToScalarCollectMicroInst::completeAcc(PacketPtr pkt, ExecContext *xc,
     // fall back to reading the device word directly
     uint64_t val = pkt ? pkt->getLE<uint64_t>()
                        : VecOffload::backend->v2sPeekValue();
-    if (fpDest && rec.vsew == 0x2) {
-        // NaN-box a 32-bit result in the 64-bit f-register
-        val |= 0xffffffff00000000ULL;
+    if (fpDest) {
+        if (rec.vsew == 0x2) {
+            // NaN-box a 32-bit result in the 64-bit f-register
+            val |= 0xffffffff00000000ULL;
+        }
+    } else {
+        // vmv.x.s sign-extends the SEW-wide element into the x-register
+        // (upstream reads vs2 through its *signed* typed view). The ACT
+        // side is a datapath that returns raw element bits, so the
+        // architectural scalar convention is applied here, where the
+        // decoded SEW and gem5's own helpers already are.
+        switch (rec.vsew) {
+          case 0x0: val = sext<8>(val);  break;
+          case 0x1: val = sext<16>(val); break;
+          case 0x2: val = sext<32>(val); break;
+          default:  break;  // SEW=64: already full width
+        }
     }
     xc->setRegOperand(this, 0, val);
     if (traceData) {
