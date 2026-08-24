@@ -835,6 +835,7 @@ class VecOffloadMicroInst : public VectorMicroInst
     VecOffloadMicroInst(ExtMachInst _machInst, const char *mnem,
                         uint32_t _elen, uint32_t _vlen);
     Fault execute(ExecContext *, trace::InstRecord *) const override;
+    bool commitOffload(uint64_t seqNum, ThreadContext *tc) const override;
     std::string generateDisassembly(
         Addr pc, const loader::SymbolTable *symtab) const override;
 };
@@ -860,6 +861,7 @@ class VecOffloadNonSplitInst : public RiscvStaticInst
   public:
     VecOffloadNonSplitInst(ExtMachInst _machInst, const char *mnem);
     Fault execute(ExecContext *, trace::InstRecord *) const override;
+    bool commitOffload(uint64_t seqNum, ThreadContext *tc) const override;
     std::string generateDisassembly(
         Addr pc, const loader::SymbolTable *symtab) const override;
 };

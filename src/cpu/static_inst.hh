@@ -307,6 +307,21 @@ class StaticInst : public RefCounted, public StaticInstFlags
         return false;
     }
 
+    /**
+     * Commit-time offload hook, called at the moment an executed,
+     * fault-free instruction is about to retire (and only then, so a
+     * record emitted here can never belong to a wrong path). Return
+     * false to refuse this cycle -- e.g. a bounded external queue is
+     * full -- and the commit stage retries; a true return means any
+     * side effect has been performed and the instruction MUST now
+     * retire, so this is the last gate before commitment.
+     */
+    virtual bool
+    commitOffload(uint64_t seqNum, ThreadContext *tc) const
+    {
+        return true;
+    }
+
     virtual Fault
     initiateAcc(ExecContext *xc, trace::InstRecord *traceData) const
     {

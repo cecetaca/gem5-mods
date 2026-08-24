@@ -71,9 +71,16 @@ class VecOffloadBackend
     virtual ~VecOffloadBackend() = default;
 
     // Fire-and-forget offload of an arithmetic (VRF-internal) record.
-    // Called at commit (the micro-op is non-speculative), in program
-    // order.
+    // Called from the commit stage as the instruction retires, in
+    // program order. The caller must have checked arithQueueFull()
+    // first: this path does not park.
     virtual void issueArith(const VecOffloadRecord &rec) = 0;
+
+    // True while the bounded offload queue cannot accept another
+    // arithmetic record; the commit stage stalls the instruction at
+    // the ROB head and retries each cycle (the honest backpressure
+    // path -- an unbounded queue would hide it).
+    virtual bool arithQueueFull() = 0;
 
     // Vector-to-scalar (deferred wakeup): the query micro-op issues the
     // record at the ROB head (fire-and-forget, program order); the

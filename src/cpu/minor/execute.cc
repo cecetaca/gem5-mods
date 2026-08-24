@@ -1380,6 +1380,21 @@ Execute::commit(ThreadID thread_id, bool only_commit_microops, bool discard,
                         /* e.g. waiting on an external co-simulated
                          * unit's response; retried next cycle */
                         completed_inst = false;
+                    } else if (!early_memory_issue &&
+                        inst->staticInst->isVector() &&
+                        instIsHeadInst(inst) &&
+                        !inst->staticInst->commitOffload(
+                            inst->id.execSeqNum,
+                            cpu.getContext(thread_id)))
+                    {
+                        /* Commit-time offload emission refused (the
+                         * bounded external queue is full); the record
+                         * leaves exactly when the instruction commits,
+                         * so hold it here and retry next cycle */
+                        DPRINTF(MinorExecute, "Not committing inst: %s yet"
+                            " as the external offload queue is full\n",
+                            *inst);
+                        completed_inst = false;
                     } else {
                         completed_inst = commitInst(inst,
                             early_memory_issue, branch, fault,

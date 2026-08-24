@@ -1011,10 +1011,16 @@ VecOffloadMicroInst::VecOffloadMicroInst(ExtMachInst _machInst,
         break;
     }
 
-    // Non-speculative: executes only at ROB head, so no wrong-path
-    // record can reach the external unit and program order among
-    // offloads is guaranteed by in-order commit.
-    this->flags[IsNonSpeculative] = true;
+    // Deliberately NOT IsNonSpeculative: the record is emitted from
+    // the commit stage (commitOffload below), which provides the same
+    // three guarantees head-execution used to buy -- wrong-path
+    // exclusion (only committing instructions emit), program order
+    // (commit order), and architectural register reads (every older
+    // instruction has retired) -- without the ~6-cycle NonSpec
+    // schedule/execute/writeback round trip per instruction. execute()
+    // is a no-op apart from the fault check, so the micro-op is
+    // already complete when it reaches the ROB head and retires at
+    // full commit width.
 }
 
 Fault
@@ -1025,19 +1031,32 @@ VecOffloadMicroInst::execute(ExecContext *xc,
              "vector_offload is enabled but no VecOffloadBackend is "
              "registered (is the ActUnit configured?)");
 
-    VecOffloadRecord r = rec;
-    RegVal vstart = xc->readMiscReg(MISCREG_VSTART);
-    if (vstart != 0) {
+    if (xc->readMiscReg(MISCREG_VSTART) != 0) {
         return std::make_shared<IllegalInstFault>(
             "vector_offload: vstart != 0 unsupported (phase 1)",
             machInst);
     }
+    return NoFault;
+}
+
+bool
+VecOffloadMicroInst::commitOffload(uint64_t seqNum, ThreadContext *tc) const
+{
+    if (tc->readMiscRegNoEffect(MISCREG_VSTART) != 0) {
+        return true;  // execute()'s fault will handle it; no record
+    }
+    if (VecOffload::backend->arithQueueFull()) {
+        return false;  // bounded queue: stall at the head and retry
+    }
+    VecOffloadRecord r = rec;
     r.vstart = 0;
-    if (scalarSrc != 0) {
-        r.scalar = xc->getRegOperand(this, 0);
+    if (scalarSrc == 1) {
+        r.scalar = tc->getReg(intRegClass[machInst.rs1]);
+    } else if (scalarSrc == 2) {
+        r.scalar = tc->getReg(floatRegClass[machInst.rs1]);
     }
     VecOffload::backend->issueArith(r);
-    return NoFault;
+    return true;
 }
 
 std::string
@@ -1104,7 +1123,8 @@ VecOffloadNonSplitInst::VecOffloadNonSplitInst(ExtMachInst _machInst,
     }
 
     this->flags[IsVector] = true;
-    this->flags[IsNonSpeculative] = true;
+    // Speculative like VecOffloadMicroInst: the record leaves from
+    // the commit stage, not from execution at the head.
 }
 
 Fault
@@ -1114,17 +1134,32 @@ VecOffloadNonSplitInst::execute(ExecContext *xc,
     panic_if(!VecOffload::backend,
              "vector_offload is enabled but no VecOffloadBackend is "
              "registered");
-    VecOffloadRecord r = rec;
     if (xc->readMiscReg(MISCREG_VSTART) != 0) {
         return std::make_shared<IllegalInstFault>(
             "vector_offload: vstart != 0 unsupported (phase 1)",
             machInst);
     }
-    if (scalarSrc != 0) {
-        r.scalar = xc->getRegOperand(this, 0);
+    return NoFault;
+}
+
+bool
+VecOffloadNonSplitInst::commitOffload(uint64_t seqNum,
+    ThreadContext *tc) const
+{
+    if (tc->readMiscRegNoEffect(MISCREG_VSTART) != 0) {
+        return true;
+    }
+    if (VecOffload::backend->arithQueueFull()) {
+        return false;
+    }
+    VecOffloadRecord r = rec;
+    if (scalarSrc == 1) {
+        r.scalar = tc->getReg(intRegClass[machInst.rs1]);
+    } else if (scalarSrc == 2) {
+        r.scalar = tc->getReg(floatRegClass[machInst.rs1]);
     }
     VecOffload::backend->issueArith(r);
-    return NoFault;
+    return true;
 }
 
 std::string

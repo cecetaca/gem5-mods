@@ -1256,6 +1256,18 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
         return false;
     }
 
+    // Commit-time offload emission (vector-offload micro-ops): the
+    // record leaves for the external unit exactly as the instruction
+    // retires. Placed after the fault path so a faulting instance
+    // never emits, and last so a refusal (bounded external queue
+    // full) can stall the head and be retried without any state
+    // having changed.
+    if (head_inst->isVector() &&
+        !head_inst->staticInst->commitOffload(head_inst->seqNum,
+                                              cpu->tcBase(tid))) {
+        return false;
+    }
+
     updateComInstStats(head_inst);
 
     DPRINTF(Commit,
