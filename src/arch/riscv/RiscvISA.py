@@ -102,15 +102,14 @@ class RiscvISA(BaseISA):
         "Requires a registered VecOffloadBackend (see "
         "arch/riscv/insts/vec_offload.hh).",
     )
-    vector_offload_relaxed_mem = Param.Bool(
-        False,
-        "Experimental: vector memory ops retire once issued, with a "
-        "barrier collect micro-op holding younger scalar memory ops "
-        "until the transfer completes. Measured equivalent-to-slower "
-        "than the default blocking mode: O3 already executes younger "
-        "independent work behind a commit-blocked head, so relaxation "
-        "only relocates the wait and adds per-op overhead. Kept for "
-        "experiments and as groundwork for a pipelined VLSU.",
+    vector_offload_decoupled_mem = Param.Bool(
+        True,
+        "Decoupled vector memory: vector loads/stores retire once "
+        "handed to the external unit; ordering against the scalar "
+        "memory stream is enforced by an address-range interlock over "
+        "the unit's in-flight accesses. Essential for scalar/vector "
+        "overlap on in-order CPUs. False restores full commit-blocking "
+        "(A/B baseline; fault-only-first always blocks).",
     )
     vlen = Param.RiscvVectorLength(
         256,

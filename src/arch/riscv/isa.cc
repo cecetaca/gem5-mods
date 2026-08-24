@@ -309,7 +309,7 @@ ISA::ISA(const Params &p) : BaseISA(p, "riscv"),
     if (p.vector_offload) {
         // phase-1 process-wide flag; see insts/vec_offload.hh
         VecOffload::enabled = true;
-        VecOffload::relaxedMem = p.vector_offload_relaxed_mem;
+        VecOffload::decoupledMem = p.vector_offload_decoupled_mem;
     }
 
     _regClasses.push_back(&intRegClass);

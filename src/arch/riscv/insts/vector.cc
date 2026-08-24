@@ -963,7 +963,7 @@ VPinVdMicroInst::generateDisassembly(Addr pc,
 /* --- vector offload (see vec_offload.hh) --- */
 
 bool VecOffload::enabled = false;
-bool VecOffload::relaxedMem = true;
+bool VecOffload::decoupledMem = true;
 VecOffloadBackend *VecOffload::backend = nullptr;
 
 VecOffloadMicroInst::VecOffloadMicroInst(ExtMachInst _machInst,
@@ -1260,7 +1260,10 @@ Fault
 VecToScalarCollectMicroInst::completeAcc(PacketPtr pkt, ExecContext *xc,
     trace::InstRecord *traceData) const
 {
-    uint64_t val = pkt->getLE<uint64_t>();
+    // Minor completes disabled/suppressed accesses with a null packet;
+    // fall back to reading the device word directly
+    uint64_t val = pkt ? pkt->getLE<uint64_t>()
+                       : VecOffload::backend->v2sPeekValue();
     if (fpDest && rec.vsew == 0x2) {
         // NaN-box a 32-bit result in the 64-bit f-register
         val |= 0xffffffff00000000ULL;
@@ -1426,15 +1429,21 @@ VecMemIssueMicroInst::VecMemIssueMicroInst(ExtMachInst _machInst,
     if (mode == VecMemMode::Strided) {
         setSrcRegIdx(_numSrcRegs++, intRegClass[_machInst.rs2]);
     }
-    // the collect micro depends on this register, so it cannot issue
-    // its completion-device load before the access has been handed off
-    setDestRegIdx(_numDestRegs++, vecRegClass[VecMemInternalReg0 + 1]);
-    _numTypedDestRegs[VecRegClass]++;
 
     this->flags[IsVector] = true;
-    // non-speculative: issues only at the ROB head, in program order,
-    // never from a wrong path; older scalar stores have drained
+    // non-speculative: executes only at the commit point, in program
+    // order, never from a wrong path, after older stores have drained.
+    // It then retires immediately (fire-and-forget); the external
+    // memory interlock orders the scalar stream against the transfer.
     this->flags[IsNonSpeculative] = true;
+    // barrier flags: younger scalar memory ops must not execute before
+    // this micro-op registers its interlock range at the commit point —
+    // an out-of-order core would otherwise run a younger load before
+    // the range exists and the interlock could never catch it. The
+    // barrier lifts as soon as the micro-op issues (it does not wait
+    // for the transfer), so the hand-off to the interlock is seamless.
+    this->flags[IsReadBarrier] = true;
+    this->flags[IsWriteBarrier] = true;
 }
 
 Fault
@@ -1454,8 +1463,6 @@ VecMemIssueMicroInst::execute(ExecContext *xc,
         (mode == VecMemMode::Strided) ? xc->getRegOperand(this, 1) : 0;
     VecOffload::backend->vecMemIssue(rec, xc->tcBase(), base, stride,
                                      isStore, mode);
-    vreg_t &d = *(vreg_t *)xc->getWritableRegOperand(this, 0);
-    d.zero();
     return NoFault;
 }
 
@@ -1464,81 +1471,7 @@ VecMemIssueMicroInst::generateDisassembly(Addr pc,
     const loader::SymbolTable *symtab) const
 {
     std::stringstream ss;
-    ss << mnemonic << "_vmem_issue";
-    return ss.str();
-}
-
-VecMemCollectMicroInst::VecMemCollectMicroInst(ExtMachInst _machInst,
-    bool _isStore)
-    : RiscvMicroInst("vmem_collect", _machInst, SimdMiscOp)
-{
-    setRegIdxArrays(
-        reinterpret_cast<RegIdArrayPtr>(
-            &std::remove_pointer_t<decltype(this)>::srcRegIdxArr),
-        reinterpret_cast<RegIdArrayPtr>(
-            &std::remove_pointer_t<decltype(this)>::destRegIdxArr));
-    _numSrcRegs = 0;
-    _numDestRegs = 0;
-
-    setSrcRegIdx(_numSrcRegs++, vecRegClass[VecMemInternalReg0 + 1]);
-
-    this->flags[IsVector] = true;
-    // load-acquire/store-release semantics: dispatched as a normal
-    // load, but registered as a memory barrier that younger scalar
-    // memory operations wait on; the barrier releases when this load
-    // completes, i.e. when the transfer is done. A vector LOAD only
-    // hazards with younger scalar STORES (write barrier); a vector
-    // STORE fences younger loads and stores alike.
-    // NB: both barrier flags even for vector loads — a load carrying
-    // only IsWriteBarrier (a "release load") trips an untested IQ
-    // squash corner upstream (dependGraph assert); the extra
-    // conservatism (younger scalar loads also wait) is mild.
-    this->flags[IsLoad] = true;
-    this->flags[IsWriteBarrier] = true;
-    this->flags[IsReadBarrier] = true;
-    (void)_isStore;
-}
-
-Fault
-VecMemCollectMicroInst::execute(ExecContext *xc,
-    trace::InstRecord *traceData) const
-{
-    panic("vmem_collect: timing-mode CPUs only (uses initiateAcc)");
-}
-
-Fault
-VecMemCollectMicroInst::initiateAcc(ExecContext *xc,
-    trace::InstRecord *traceData) const
-{
-    panic_if(!VecOffload::backend,
-             "vector_offload is enabled but no VecOffloadBackend is "
-             "registered");
-    if (VecOffload::backend->vecMemFrontDone()) {
-        // the transfer already finished: no need to pay the device
-        // round trip; complete as a predicated-off access
-        xc->setMemAccPredicate(false);
-        return NoFault;
-    }
-    uint64_t va = VecOffload::backend->vecMemCompletionVAddr(xc->tcBase());
-    const std::vector<bool> byte_enable(8, true);
-    return xc->initiateMemRead(va, 8, Request::UNCACHEABLE, byte_enable);
-}
-
-Fault
-VecMemCollectMicroInst::completeAcc(PacketPtr pkt, ExecContext *xc,
-    trace::InstRecord *traceData) const
-{
-    // the device's response *is* the completion signal; no value to
-    // write
-    return NoFault;
-}
-
-std::string
-VecMemCollectMicroInst::generateDisassembly(Addr pc,
-    const loader::SymbolTable *symtab) const
-{
-    std::stringstream ss;
-    ss << mnemonic;
+    ss << mnemonic << "_voffload";
     return ss.str();
 }
 
@@ -1557,15 +1490,14 @@ makeVecOffloadMemMicroops(ExtMachInst emi, const char *mnem, uint32_t elen,
                  "%s: segment accesses require LMUL=1 with "
                  "vector_offload", mnem);
     }
-    if (mode == VecMemMode::Fof || !VecOffload::relaxedMem) {
+    if (mode == VecMemMode::Fof || !VecOffload::decoupledMem) {
         // fault-only-first must know its trimmed vl before retiring;
-        // blocking mode is also the phase-1 A/B baseline
+        // blocking mode is also the A/B baseline
         return {new VecOffloadMemMicroInst(emi, mnem, elen, vlen,
                                            isStore, mode)};
     }
     return {new VecMemIssueMicroInst(emi, mnem, elen, vlen, isStore,
-                                     mode),
-            new VecMemCollectMicroInst(emi, isStore)};
+                                     mode)};
 }
 
 StaticInstPtr
