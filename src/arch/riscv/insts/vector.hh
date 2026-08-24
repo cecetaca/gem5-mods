@@ -844,6 +844,48 @@ class VecOffloadMicroInst : public VectorMicroInst
 StaticInstPtr makeVecOffloadMicroop(ExtMachInst emi, const char *mnem,
                                     uint32_t elen, uint32_t vlen);
 
+// Non-split offload instructions (vmv.x.s / vfmv.f.s / vmv.s.x /
+// vfmv.s.f): plain StaticInsts, dispatched by the NonSplit decode
+// blocks when vector_offload is active.
+
+// scalar -> vector move: fire-and-forget record with a scalar source
+class VecOffloadNonSplitInst : public RiscvStaticInst
+{
+  private:
+    RegId srcRegIdxArr[1];
+    RegId destRegIdxArr[1];
+    VecOffloadRecord rec;
+    uint8_t scalarSrc;  // 0 none, 1 int rs1, 2 fp fs1
+
+  public:
+    VecOffloadNonSplitInst(ExtMachInst _machInst, const char *mnem);
+    Fault execute(ExecContext *, trace::InstRecord *) const override;
+    std::string generateDisassembly(
+        Addr pc, const loader::SymbolTable *symtab) const override;
+};
+
+// vector -> scalar move: blocks at the ROB head until the external
+// unit's response arrives, then writes the scalar destination
+class VecOffloadToScalarInst : public RiscvStaticInst
+{
+  private:
+    RegId srcRegIdxArr[1];
+    RegId destRegIdxArr[1];
+    VecOffloadRecord rec;
+    bool fpDest;
+
+  public:
+    VecOffloadToScalarInst(ExtMachInst _machInst, const char *mnem,
+                           bool _fpDest);
+    bool commitBlocked(uint64_t seqNum) const override;
+    Fault execute(ExecContext *, trace::InstRecord *) const override;
+    std::string generateDisassembly(
+        Addr pc, const loader::SymbolTable *symtab) const override;
+};
+
+StaticInstPtr makeVecOffloadNonSplit(ExtMachInst emi, const char *mnem,
+                                     uint32_t elen, uint32_t vlen);
+
 } // namespace RiscvISA
 } // namespace gem5
 

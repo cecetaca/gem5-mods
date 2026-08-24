@@ -1046,6 +1046,175 @@ VecOffloadMicroInst::generateDisassembly(Addr pc,
     return ss.str();
 }
 
+namespace
+{
+
+VecOffloadRecord
+buildVecOffloadRecord(ExtMachInst emi)
+{
+    VecOffloadRecord r;
+    r.rawInst = emi.all;
+    r.vfunct6 = emi.vfunct6;
+    r.funct3 = emi.funct3;
+    r.opClass = VecOffloadArith;
+    r.vd = emi.rd;
+    r.vs1 = emi.rs1;
+    r.vs2 = emi.rs2;
+    r.vm = emi.vm;
+    r.vsew = emi.vtype8.vsew;
+    r.vlmul = emi.vtype8.vlmul;
+    r.vta = emi.vtype8.vta;
+    r.vma = emi.vtype8.vma;
+    r.vl = emi.vl;
+    r.vstart = 0;
+    return r;
+}
+
+} // anonymous namespace
+
+VecOffloadNonSplitInst::VecOffloadNonSplitInst(ExtMachInst _machInst,
+    const char *mnem)
+    : RiscvStaticInst(mnem, _machInst, SimdMiscOp)
+{
+    setRegIdxArrays(
+        reinterpret_cast<RegIdArrayPtr>(
+            &std::remove_pointer_t<decltype(this)>::srcRegIdxArr),
+        reinterpret_cast<RegIdArrayPtr>(
+            &std::remove_pointer_t<decltype(this)>::destRegIdxArr));
+    _numSrcRegs = 0;
+    _numDestRegs = 0;
+
+    rec = buildVecOffloadRecord(_machInst);
+
+    switch (rec.funct3) {
+      case 0x6:  // OPMVX (vmv.s.x)
+        scalarSrc = 1;
+        setSrcRegIdx(_numSrcRegs++, intRegClass[_machInst.rs1]);
+        break;
+      case 0x5:  // OPFVF (vfmv.s.f)
+        scalarSrc = 2;
+        setSrcRegIdx(_numSrcRegs++, floatRegClass[_machInst.rs1]);
+        break;
+      default:
+        scalarSrc = 0;
+        break;
+    }
+
+    this->flags[IsVector] = true;
+    this->flags[IsNonSpeculative] = true;
+}
+
+Fault
+VecOffloadNonSplitInst::execute(ExecContext *xc,
+    trace::InstRecord *traceData) const
+{
+    panic_if(!VecOffload::backend,
+             "vector_offload is enabled but no VecOffloadBackend is "
+             "registered");
+    VecOffloadRecord r = rec;
+    if (xc->readMiscReg(MISCREG_VSTART) != 0) {
+        return std::make_shared<IllegalInstFault>(
+            "vector_offload: vstart != 0 unsupported (phase 1)",
+            machInst);
+    }
+    if (scalarSrc != 0) {
+        r.scalar = xc->getRegOperand(this, 0);
+    }
+    VecOffload::backend->issueArith(r);
+    return NoFault;
+}
+
+std::string
+VecOffloadNonSplitInst::generateDisassembly(Addr pc,
+    const loader::SymbolTable *symtab) const
+{
+    std::stringstream ss;
+    ss << mnemonic << "_voffload";
+    return ss.str();
+}
+
+VecOffloadToScalarInst::VecOffloadToScalarInst(ExtMachInst _machInst,
+    const char *mnem, bool _fpDest)
+    : RiscvStaticInst(mnem, _machInst, SimdMiscOp), fpDest(_fpDest)
+{
+    setRegIdxArrays(
+        reinterpret_cast<RegIdArrayPtr>(
+            &std::remove_pointer_t<decltype(this)>::srcRegIdxArr),
+        reinterpret_cast<RegIdArrayPtr>(
+            &std::remove_pointer_t<decltype(this)>::destRegIdxArr));
+    _numSrcRegs = 0;
+    _numDestRegs = 0;
+
+    rec = buildVecOffloadRecord(_machInst);
+    rec.opClass = VecOffloadToScalar;
+
+    if (fpDest) {
+        setDestRegIdx(_numDestRegs++, floatRegClass[_machInst.rd]);
+        _numTypedDestRegs[FloatRegClass]++;
+    } else {
+        setDestRegIdx(_numDestRegs++, intRegClass[_machInst.rd]);
+        _numTypedDestRegs[IntRegClass]++;
+    }
+
+    this->flags[IsVector] = true;
+    this->flags[IsNonSpeculative] = true;
+}
+
+bool
+VecOffloadToScalarInst::commitBlocked(uint64_t seqNum) const
+{
+    panic_if(!VecOffload::backend,
+             "vector_offload is enabled but no VecOffloadBackend is "
+             "registered");
+    return VecOffload::backend->vecToScalarBlocked(seqNum, rec);
+}
+
+Fault
+VecOffloadToScalarInst::execute(ExecContext *xc,
+    trace::InstRecord *traceData) const
+{
+    panic_if(!VecOffload::backend,
+             "vector_offload is enabled but no VecOffloadBackend is "
+             "registered");
+    uint64_t val = VecOffload::backend->consumeScalarResponse();
+    if (fpDest && rec.vsew == 0x2) {
+        // NaN-box a 32-bit result in the 64-bit f-register
+        val |= 0xffffffff00000000ULL;
+    }
+    xc->setRegOperand(this, 0, val);
+    if (traceData) {
+        traceData->setData(fpDest ? floatRegClass : intRegClass, val);
+    }
+    return NoFault;
+}
+
+std::string
+VecOffloadToScalarInst::generateDisassembly(Addr pc,
+    const loader::SymbolTable *symtab) const
+{
+    std::stringstream ss;
+    ss << mnemonic << "_voffload";
+    return ss.str();
+}
+
+StaticInstPtr
+makeVecOffloadNonSplit(ExtMachInst emi, const char *mnem, uint32_t elen,
+                       uint32_t vlen)
+{
+    switch (emi.funct3) {
+      case 0x2:  // OPMVV: vmv.x.s
+        return new VecOffloadToScalarInst(emi, mnem, false);
+      case 0x1:  // OPFVV: vfmv.f.s
+        return new VecOffloadToScalarInst(emi, mnem, true);
+      case 0x6:  // OPMVX: vmv.s.x
+      case 0x5:  // OPFVF: vfmv.s.f
+        return new VecOffloadNonSplitInst(emi, mnem);
+      default:
+        panic("makeVecOffloadNonSplit: unexpected funct3 %#x",
+              (int)emi.funct3);
+    }
+}
+
 StaticInstPtr
 makeVecOffloadMicroop(ExtMachInst emi, const char *mnem, uint32_t elen,
                       uint32_t vlen)

@@ -63,6 +63,17 @@ class VecOffloadBackend
     // Called at commit (the micro-op is non-speculative), in program
     // order.
     virtual void issueArith(const VecOffloadRecord &rec) = 0;
+
+    // Vector-to-scalar support. commitBlocked() polls this every cycle
+    // while the instruction stalls at the ROB head: the first call for
+    // a given dynamic seqNum issues the record; it returns true while
+    // the response is pending and false once the scalar is ready.
+    virtual bool vecToScalarBlocked(uint64_t seqNum,
+                                    const VecOffloadRecord &rec) = 0;
+    // Consume the oldest ready vector-to-scalar response (valid once
+    // vecToScalarBlocked returned false; commit is in-order, so the
+    // oldest ready response belongs to the executing instruction).
+    virtual uint64_t consumeScalarResponse() = 0;
 };
 
 // Process-wide state (phase 1: single backend / single offloading hart).
