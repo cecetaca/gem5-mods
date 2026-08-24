@@ -864,9 +864,36 @@ class VecOffloadNonSplitInst : public RiscvStaticInst
         Addr pc, const loader::SymbolTable *symtab) const override;
 };
 
-// vector -> scalar move: blocks at the ROB head until the external
-// unit's response arrives, then writes the scalar destination
-class VecOffloadToScalarInst : public RiscvStaticInst
+// vector -> scalar move, deferred-wakeup form: a macro of two micros.
+// The query micro issues the record at the ROB head (non-speculative,
+// fire-and-forget) and writes an internal vector register; the collect
+// micro depends on that register and performs an uncacheable load from
+// the backend's response device, writing rd — so younger instructions
+// keep executing while the ACT response is pending.
+class VecToScalarMacroInst : public RiscvMacroInst
+{
+  public:
+    VecToScalarMacroInst(ExtMachInst _machInst, const char *mnem,
+                         bool fpDest);
+    std::string generateDisassembly(
+        Addr pc, const loader::SymbolTable *symtab) const override;
+};
+
+class VecToScalarQueryMicroInst : public RiscvMicroInst
+{
+  private:
+    RegId srcRegIdxArr[1];
+    RegId destRegIdxArr[1];
+    VecOffloadRecord rec;
+
+  public:
+    VecToScalarQueryMicroInst(ExtMachInst _machInst);
+    Fault execute(ExecContext *, trace::InstRecord *) const override;
+    std::string generateDisassembly(
+        Addr pc, const loader::SymbolTable *symtab) const override;
+};
+
+class VecToScalarCollectMicroInst : public RiscvMicroInst
 {
   private:
     RegId srcRegIdxArr[1];
@@ -875,10 +902,11 @@ class VecOffloadToScalarInst : public RiscvStaticInst
     bool fpDest;
 
   public:
-    VecOffloadToScalarInst(ExtMachInst _machInst, const char *mnem,
-                           bool _fpDest);
-    bool commitBlocked(uint64_t seqNum, ThreadContext *tc) const override;
+    VecToScalarCollectMicroInst(ExtMachInst _machInst, bool _fpDest);
     Fault execute(ExecContext *, trace::InstRecord *) const override;
+    Fault initiateAcc(ExecContext *, trace::InstRecord *) const override;
+    Fault completeAcc(PacketPtr, ExecContext *,
+                      trace::InstRecord *) const override;
     std::string generateDisassembly(
         Addr pc, const loader::SymbolTable *symtab) const override;
 };

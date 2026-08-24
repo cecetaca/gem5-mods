@@ -38,6 +38,7 @@
 #include "arch/riscv/utility.hh"
 #include "cpu/static_inst.hh"
 #include "cpu/thread_context.hh"
+#include "mem/packet_access.hh"
 
 namespace gem5
 {
@@ -1134,9 +1135,30 @@ VecOffloadNonSplitInst::generateDisassembly(Addr pc,
     return ss.str();
 }
 
-VecOffloadToScalarInst::VecOffloadToScalarInst(ExtMachInst _machInst,
-    const char *mnem, bool _fpDest)
-    : RiscvStaticInst(mnem, _machInst, SimdMiscOp), fpDest(_fpDest)
+VecToScalarMacroInst::VecToScalarMacroInst(ExtMachInst _machInst,
+    const char *mnem, bool fpDest)
+    : RiscvMacroInst(mnem, _machInst, SimdMiscOp)
+{
+    this->flags[IsVector] = true;
+    StaticInstPtr q = new VecToScalarQueryMicroInst(_machInst);
+    StaticInstPtr c = new VecToScalarCollectMicroInst(_machInst, fpDest);
+    this->microops.push_back(q);
+    this->microops.push_back(c);
+    this->microops.front()->setFirstMicroop();
+    this->microops.back()->setLastMicroop();
+}
+
+std::string
+VecToScalarMacroInst::generateDisassembly(Addr pc,
+    const loader::SymbolTable *symtab) const
+{
+    std::stringstream ss;
+    ss << mnemonic << "_voffload";
+    return ss.str();
+}
+
+VecToScalarQueryMicroInst::VecToScalarQueryMicroInst(ExtMachInst _machInst)
+    : RiscvMicroInst("v2s_query", _machInst, SimdMiscOp)
 {
     setRegIdxArrays(
         reinterpret_cast<RegIdArrayPtr>(
@@ -1149,6 +1171,59 @@ VecOffloadToScalarInst::VecOffloadToScalarInst(ExtMachInst _machInst,
     rec = buildVecOffloadRecord(_machInst);
     rec.opClass = VecOffloadToScalar;
 
+    // renamed internal vector register: the collect micro sources it,
+    // so it cannot issue before this micro executes (at the ROB head)
+    setDestRegIdx(_numDestRegs++, vecRegClass[VecMemInternalReg0]);
+    _numTypedDestRegs[VecRegClass]++;
+
+    this->flags[IsVector] = true;
+    this->flags[IsNonSpeculative] = true;
+}
+
+Fault
+VecToScalarQueryMicroInst::execute(ExecContext *xc,
+    trace::InstRecord *traceData) const
+{
+    panic_if(!VecOffload::backend,
+             "vector_offload is enabled but no VecOffloadBackend is "
+             "registered");
+    if (xc->readMiscReg(MISCREG_VSTART) != 0) {
+        return std::make_shared<IllegalInstFault>(
+            "vector_offload: vstart != 0 unsupported (phase 1)",
+            machInst);
+    }
+    VecOffload::backend->v2sIssueQuery(rec);
+    // dummy write to release the dependence chain
+    vreg_t &d = *(vreg_t *)xc->getWritableRegOperand(this, 0);
+    d.zero();
+    return NoFault;
+}
+
+std::string
+VecToScalarQueryMicroInst::generateDisassembly(Addr pc,
+    const loader::SymbolTable *symtab) const
+{
+    std::stringstream ss;
+    ss << mnemonic;
+    return ss.str();
+}
+
+VecToScalarCollectMicroInst::VecToScalarCollectMicroInst(
+    ExtMachInst _machInst, bool _fpDest)
+    : RiscvMicroInst("v2s_collect", _machInst, SimdMiscOp),
+      fpDest(_fpDest)
+{
+    setRegIdxArrays(
+        reinterpret_cast<RegIdArrayPtr>(
+            &std::remove_pointer_t<decltype(this)>::srcRegIdxArr),
+        reinterpret_cast<RegIdArrayPtr>(
+            &std::remove_pointer_t<decltype(this)>::destRegIdxArr));
+    _numSrcRegs = 0;
+    _numDestRegs = 0;
+
+    rec = buildVecOffloadRecord(_machInst);
+
+    setSrcRegIdx(_numSrcRegs++, vecRegClass[VecMemInternalReg0]);
     if (fpDest) {
         setDestRegIdx(_numDestRegs++, floatRegClass[_machInst.rd]);
         _numTypedDestRegs[FloatRegClass]++;
@@ -1158,27 +1233,33 @@ VecOffloadToScalarInst::VecOffloadToScalarInst(ExtMachInst _machInst,
     }
 
     this->flags[IsVector] = true;
-    this->flags[IsNonSpeculative] = true;
-}
-
-bool
-VecOffloadToScalarInst::commitBlocked(uint64_t seqNum,
-                                      ThreadContext *tc) const
-{
-    panic_if(!VecOffload::backend,
-             "vector_offload is enabled but no VecOffloadBackend is "
-             "registered");
-    return VecOffload::backend->vecToScalarBlocked(seqNum, rec);
+    this->flags[IsLoad] = true;
 }
 
 Fault
-VecOffloadToScalarInst::execute(ExecContext *xc,
+VecToScalarCollectMicroInst::execute(ExecContext *xc,
+    trace::InstRecord *traceData) const
+{
+    panic("v2s_collect: timing-mode CPUs only (uses initiateAcc)");
+}
+
+Fault
+VecToScalarCollectMicroInst::initiateAcc(ExecContext *xc,
     trace::InstRecord *traceData) const
 {
     panic_if(!VecOffload::backend,
              "vector_offload is enabled but no VecOffloadBackend is "
              "registered");
-    uint64_t val = VecOffload::backend->consumeScalarResponse();
+    uint64_t va = VecOffload::backend->v2sLoadVAddr(xc->tcBase());
+    const std::vector<bool> byte_enable(8, true);
+    return xc->initiateMemRead(va, 8, Request::UNCACHEABLE, byte_enable);
+}
+
+Fault
+VecToScalarCollectMicroInst::completeAcc(PacketPtr pkt, ExecContext *xc,
+    trace::InstRecord *traceData) const
+{
+    uint64_t val = pkt->getLE<uint64_t>();
     if (fpDest && rec.vsew == 0x2) {
         // NaN-box a 32-bit result in the 64-bit f-register
         val |= 0xffffffff00000000ULL;
@@ -1191,11 +1272,11 @@ VecOffloadToScalarInst::execute(ExecContext *xc,
 }
 
 std::string
-VecOffloadToScalarInst::generateDisassembly(Addr pc,
+VecToScalarCollectMicroInst::generateDisassembly(Addr pc,
     const loader::SymbolTable *symtab) const
 {
     std::stringstream ss;
-    ss << mnemonic << "_voffload";
+    ss << mnemonic;
     return ss.str();
 }
 
@@ -1205,9 +1286,9 @@ makeVecOffloadNonSplit(ExtMachInst emi, const char *mnem, uint32_t elen,
 {
     switch (emi.funct3) {
       case 0x2:  // OPMVV: vmv.x.s
-        return new VecOffloadToScalarInst(emi, mnem, false);
+        return new VecToScalarMacroInst(emi, mnem, false);
       case 0x1:  // OPFVV: vfmv.f.s
-        return new VecOffloadToScalarInst(emi, mnem, true);
+        return new VecToScalarMacroInst(emi, mnem, true);
       case 0x6:  // OPMVX: vmv.s.x
       case 0x5:  // OPFVF: vfmv.s.f
         return new VecOffloadNonSplitInst(emi, mnem);

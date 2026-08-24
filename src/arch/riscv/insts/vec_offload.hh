@@ -75,16 +75,17 @@ class VecOffloadBackend
     // order.
     virtual void issueArith(const VecOffloadRecord &rec) = 0;
 
-    // Vector-to-scalar support. commitBlocked() polls this every cycle
-    // while the instruction stalls at the ROB head: the first call for
-    // a given dynamic seqNum issues the record; it returns true while
-    // the response is pending and false once the scalar is ready.
-    virtual bool vecToScalarBlocked(uint64_t seqNum,
-                                    const VecOffloadRecord &rec) = 0;
-    // Consume the oldest ready vector-to-scalar response (valid once
-    // vecToScalarBlocked returned false; commit is in-order, so the
-    // oldest ready response belongs to the executing instruction).
-    virtual uint64_t consumeScalarResponse() = 0;
+    // Vector-to-scalar (deferred wakeup): the query micro-op issues the
+    // record at the ROB head (fire-and-forget, program order); the
+    // dependent collect micro-op is an uncacheable load from the
+    // backend's response device, so younger instructions keep executing
+    // while the response is pending. At most one query is outstanding
+    // (the collect load must commit before the next query reaches the
+    // head).
+    virtual void v2sIssueQuery(const VecOffloadRecord &rec) = 0;
+    // VA of the response device word for the pending query; lazily maps
+    // the device page into the SE process on first use.
+    virtual uint64_t v2sLoadVAddr(ThreadContext *tc) = 0;
 
     // Vector memory: the external unit owns address generation and
     // element traffic; gem5 services its requests. The instruction
