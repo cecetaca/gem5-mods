@@ -294,6 +294,19 @@ class StaticInst : public RefCounted, public StaticInstFlags
     virtual Fault execute(ExecContext *xc,
             trace::InstRecord *traceData) const = 0;
 
+    /**
+     * Ask a non-speculative instruction whether it must keep stalling
+     * at the head of the ROB (e.g. waiting for an external co-simulated
+     * unit). Called every cycle before the instruction is scheduled for
+     * execution at commit; default is never blocked. The sequence
+     * number identifies the dynamic instance (StaticInsts are shared).
+     */
+    virtual bool
+    commitBlocked(uint64_t seqNum) const
+    {
+        return false;
+    }
+
     virtual Fault
     initiateAcc(ExecContext *xc, trace::InstRecord *traceData) const
     {
