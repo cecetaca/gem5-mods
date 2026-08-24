@@ -64,10 +64,12 @@ def template VleConstructor {{
     %(set_reg_idx_arr)s;
     %(constructor)s;
     if (vecOffloadActive()) {
-        this->microops.push_back(makeVecOffloadMemMicroop(
-            _machInst, "%(mnemonic)s", this->elen, this->vlen, false,
-            _opClass == SimdUnitStrideFaultOnlyFirstLoadOp
-                ? VecMemMode::Fof : VecMemMode::Unit));
+        for (auto &vm_uop : makeVecOffloadMemMicroops(
+                 _machInst, "%(mnemonic)s", this->elen, this->vlen,
+                 false, _opClass == SimdUnitStrideFaultOnlyFirstLoadOp
+                     ? VecMemMode::Fof : VecMemMode::Unit)) {
+            this->microops.push_back(vm_uop);
+        }
         this->microops.front()->setFirstMicroop();
         this->microops.back()->setLastMicroop();
         return;
@@ -282,9 +284,11 @@ def template VseConstructor {{
     %(set_reg_idx_arr)s;
     %(constructor)s;
     if (vecOffloadActive()) {
-        this->microops.push_back(makeVecOffloadMemMicroop(
-            _machInst, "%(mnemonic)s", this->elen, this->vlen,
-            true, VecMemMode::Unit));
+        for (auto &vm_uop : makeVecOffloadMemMicroops(
+                 _machInst, "%(mnemonic)s", this->elen,
+                 this->vlen, true, VecMemMode::Unit)) {
+            this->microops.push_back(vm_uop);
+        }
         this->microops.front()->setFirstMicroop();
         this->microops.back()->setLastMicroop();
         return;
@@ -824,9 +828,11 @@ def template VlStrideConstructor {{
     %(set_reg_idx_arr)s;
     %(constructor)s;
     if (vecOffloadActive()) {
-        this->microops.push_back(makeVecOffloadMemMicroop(
-            _machInst, "%(mnemonic)s", this->elen, this->vlen,
-            false, VecMemMode::Strided));
+        for (auto &vm_uop : makeVecOffloadMemMicroops(
+                 _machInst, "%(mnemonic)s", this->elen,
+                 this->vlen, false, VecMemMode::Strided)) {
+            this->microops.push_back(vm_uop);
+        }
         this->microops.front()->setFirstMicroop();
         this->microops.back()->setLastMicroop();
         return;
@@ -899,9 +905,11 @@ def template VsStrideConstructor {{
     %(set_reg_idx_arr)s;
     %(constructor)s;
     if (vecOffloadActive()) {
-        this->microops.push_back(makeVecOffloadMemMicroop(
-            _machInst, "%(mnemonic)s", this->elen, this->vlen,
-            true, VecMemMode::Strided));
+        for (auto &vm_uop : makeVecOffloadMemMicroops(
+                 _machInst, "%(mnemonic)s", this->elen,
+                 this->vlen, true, VecMemMode::Strided)) {
+            this->microops.push_back(vm_uop);
+        }
         this->microops.front()->setFirstMicroop();
         this->microops.back()->setLastMicroop();
         return;
@@ -968,9 +976,11 @@ template<typename ElemType>
     %(set_reg_idx_arr)s;
     %(constructor)s;
     if (vecOffloadActive()) {
-        this->microops.push_back(makeVecOffloadMemMicroop(
-            _machInst, "%(mnemonic)s", this->elen, this->vlen,
-            false, VecMemMode::Indexed));
+        for (auto &vm_uop : makeVecOffloadMemMicroops(
+                 _machInst, "%(mnemonic)s", this->elen,
+                 this->vlen, false, VecMemMode::Indexed)) {
+            this->microops.push_back(vm_uop);
+        }
         this->microops.front()->setFirstMicroop();
         this->microops.back()->setLastMicroop();
         return;
@@ -1221,9 +1231,11 @@ template<typename ElemType>
     %(set_reg_idx_arr)s;
     %(constructor)s;
     if (vecOffloadActive()) {
-        this->microops.push_back(makeVecOffloadMemMicroop(
-            _machInst, "%(mnemonic)s", this->elen, this->vlen,
-            true, VecMemMode::Indexed));
+        for (auto &vm_uop : makeVecOffloadMemMicroops(
+                 _machInst, "%(mnemonic)s", this->elen,
+                 this->vlen, true, VecMemMode::Indexed)) {
+            this->microops.push_back(vm_uop);
+        }
         this->microops.front()->setFirstMicroop();
         this->microops.back()->setLastMicroop();
         return;
@@ -1429,9 +1441,11 @@ def template VlSegConstructor {{
     %(set_reg_idx_arr)s;
     %(constructor)s;
     if (vecOffloadActive()) {
-        this->microops.push_back(makeVecOffloadMemMicroop(
-            _machInst, "%(mnemonic)s", this->elen, this->vlen,
-            false, VecMemMode::Unit));
+        for (auto &vm_uop : makeVecOffloadMemMicroops(
+                 _machInst, "%(mnemonic)s", this->elen,
+                 this->vlen, false, VecMemMode::Unit)) {
+            this->microops.push_back(vm_uop);
+        }
         this->microops.front()->setFirstMicroop();
         this->microops.back()->setLastMicroop();
         return;
@@ -1695,9 +1709,11 @@ def template VsSegConstructor {{
     %(set_reg_idx_arr)s;
     %(constructor)s;
     if (vecOffloadActive()) {
-        this->microops.push_back(makeVecOffloadMemMicroop(
-            _machInst, "%(mnemonic)s", this->elen, this->vlen,
-            true, VecMemMode::Unit));
+        for (auto &vm_uop : makeVecOffloadMemMicroops(
+                 _machInst, "%(mnemonic)s", this->elen,
+                 this->vlen, true, VecMemMode::Unit)) {
+            this->microops.push_back(vm_uop);
+        }
         this->microops.front()->setFirstMicroop();
         this->microops.back()->setLastMicroop();
         return;

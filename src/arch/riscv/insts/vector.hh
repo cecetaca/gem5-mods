@@ -938,9 +938,50 @@ class VecOffloadMemMicroInst : public VectorMicroInst
         Addr pc, const loader::SymbolTable *symtab) const override;
 };
 
-StaticInstPtr makeVecOffloadMemMicroop(ExtMachInst emi, const char *mnem,
-                                       uint32_t elen, uint32_t vlen,
-                                       bool isStore, VecMemMode mode);
+// Relaxed-ordering vector memory: issue at the head (fire-and-forget),
+// collect via a barrier-carrying load from the completion device.
+class VecMemIssueMicroInst : public VectorMicroInst
+{
+  private:
+    RegId srcRegIdxArr[2];
+    RegId destRegIdxArr[1];
+    VecOffloadRecord rec;
+    bool isStore;
+    VecMemMode mode;
+
+  public:
+    VecMemIssueMicroInst(ExtMachInst _machInst, const char *mnem,
+                         uint32_t _elen, uint32_t _vlen, bool _isStore,
+                         VecMemMode _mode);
+    Fault execute(ExecContext *, trace::InstRecord *) const override;
+    std::string generateDisassembly(
+        Addr pc, const loader::SymbolTable *symtab) const override;
+};
+
+class VecMemCollectMicroInst : public RiscvMicroInst
+{
+  private:
+    RegId srcRegIdxArr[1];
+    RegId destRegIdxArr[1];
+
+  public:
+    VecMemCollectMicroInst(ExtMachInst _machInst, bool _isStore);
+    Fault execute(ExecContext *, trace::InstRecord *) const override;
+    Fault initiateAcc(ExecContext *, trace::InstRecord *) const override;
+    Fault completeAcc(PacketPtr, ExecContext *,
+                      trace::InstRecord *) const override;
+    std::string generateDisassembly(
+        Addr pc, const loader::SymbolTable *symtab) const override;
+};
+
+// Returns the micro-op(s) implementing an offloaded vector memory
+// access: {issue, collect} under relaxed ordering, or a single blocking
+// micro-op for fault-only-first and for vector_offload_relaxed_mem =
+// False.
+std::vector<StaticInstPtr>
+makeVecOffloadMemMicroops(ExtMachInst emi, const char *mnem,
+                          uint32_t elen, uint32_t vlen, bool isStore,
+                          VecMemMode mode);
 
 } // namespace RiscvISA
 } // namespace gem5

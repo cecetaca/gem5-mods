@@ -105,6 +105,21 @@ class VecOffloadBackend
     // number of elements completed before the first faulting element
     // (the new vl).
     virtual uint32_t consumeFofVl() = 0;
+
+    // Relaxed-ordering vector memory (default): the issue micro hands
+    // the access off at the ROB head and retires; the collect micro is
+    // a load-acquire/release from the completion device, so only
+    // younger scalar memory operations wait for the transfer.
+    virtual void vecMemIssue(const VecOffloadRecord &rec,
+                             ThreadContext *tc, uint64_t base,
+                             uint64_t stride, bool isStore,
+                             VecMemMode mode) = 0;
+    // VA of the completion-device word the collect micro reads.
+    virtual uint64_t vecMemCompletionVAddr(ThreadContext *tc) = 0;
+    // True iff the oldest outstanding relaxed transfer (the one the
+    // executing collect micro belongs to) has already completed; lets
+    // the collect skip the device round trip entirely.
+    virtual bool vecMemFrontDone() = 0;
 };
 
 // Process-wide state (phase 1: single backend / single offloading hart).
@@ -113,6 +128,10 @@ class VecOffloadBackend
 struct VecOffload
 {
     static bool enabled;
+    // relaxed vector/scalar memory ordering (barrier released at
+    // transfer completion instead of blocking commit for the whole
+    // transfer); settable per run for A/B comparison
+    static bool relaxedMem;
     static VecOffloadBackend *backend;
 };
 
