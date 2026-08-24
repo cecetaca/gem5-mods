@@ -896,21 +896,23 @@ class VecOffloadMemMicroInst : public VectorMicroInst
     RegId destRegIdxArr[1];
     VecOffloadRecord rec;
     bool isStore;
-    bool isStrided;
+    VecMemMode mode;
 
   public:
     VecOffloadMemMicroInst(ExtMachInst _machInst, const char *mnem,
                            uint32_t _elen, uint32_t _vlen, bool _isStore,
-                           bool _isStrided);
+                           VecMemMode _mode);
     bool commitBlocked(uint64_t seqNum, ThreadContext *tc) const override;
     Fault execute(ExecContext *, trace::InstRecord *) const override;
+    std::unique_ptr<PCStateBase>
+        branchTarget(ThreadContext *tc) const override;
     std::string generateDisassembly(
         Addr pc, const loader::SymbolTable *symtab) const override;
 };
 
 StaticInstPtr makeVecOffloadMemMicroop(ExtMachInst emi, const char *mnem,
                                        uint32_t elen, uint32_t vlen,
-                                       bool isStore, bool isStrided);
+                                       bool isStore, VecMemMode mode);
 
 } // namespace RiscvISA
 } // namespace gem5

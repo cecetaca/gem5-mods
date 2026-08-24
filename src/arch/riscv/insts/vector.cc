@@ -1219,10 +1219,10 @@ makeVecOffloadNonSplit(ExtMachInst emi, const char *mnem, uint32_t elen,
 
 VecOffloadMemMicroInst::VecOffloadMemMicroInst(ExtMachInst _machInst,
     const char *mnem, uint32_t _elen, uint32_t _vlen, bool _isStore,
-    bool _isStrided)
+    VecMemMode _mode)
     : VectorMicroInst(mnem, _machInst, SimdMiscOp,
                       _machInst.vl, 0, _elen, _vlen),
-      isStore(_isStore), isStrided(_isStrided)
+      isStore(_isStore), mode(_mode)
 {
     setRegIdxArrays(
         reinterpret_cast<RegIdArrayPtr>(
@@ -1241,7 +1241,7 @@ VecOffloadMemMicroInst::VecOffloadMemMicroInst(ExtMachInst _machInst,
     // declared for rename/dependence tracking; the architectural values
     // are read at the ROB head via the ThreadContext
     setSrcRegIdx(_numSrcRegs++, intRegClass[_machInst.rs1]);
-    if (isStrided) {
+    if (mode == VecMemMode::Strided) {
         setSrcRegIdx(_numSrcRegs++, intRegClass[_machInst.rs2]);
     }
 
@@ -1250,6 +1250,16 @@ VecOffloadMemMicroInst::VecOffloadMemMicroInst(ExtMachInst _machInst,
     // full serialization against scalar memory (phase-1 pessimism)
     this->flags[IsReadBarrier] = true;
     this->flags[IsWriteBarrier] = true;
+
+    if (mode == VecMemMode::Fof) {
+        // fault-only-first trims vl: modeled as an unconditional
+        // control transfer carrying the new vconf (VlFFTrimVlMicroOp
+        // pattern)
+        this->flags[IsControl] = true;
+        this->flags[IsIndirectControl] = true;
+        this->flags[IsInteger] = true;
+        this->flags[IsUncondControl] = true;
+    }
 }
 
 bool
@@ -1260,10 +1270,10 @@ VecOffloadMemMicroInst::commitBlocked(uint64_t seqNum,
              "vector_offload is enabled but no VecOffloadBackend is "
              "registered");
     uint64_t base = tc->getReg(intRegClass[machInst.rs1]);
-    uint64_t stride =
-        isStrided ? tc->getReg(intRegClass[machInst.rs2]) : 0;
+    uint64_t stride = (mode == VecMemMode::Strided)
+        ? tc->getReg(intRegClass[machInst.rs2]) : 0;
     return VecOffload::backend->vecMemBlocked(seqNum, rec, tc, base,
-                                              stride, isStore, isStrided);
+                                              stride, isStore, mode);
 }
 
 Fault
@@ -1276,7 +1286,30 @@ VecOffloadMemMicroInst::execute(ExecContext *xc,
             machInst);
     }
     // the transfer completed while blocked at the ROB head
+    if (mode == VecMemMode::Fof) {
+        uint32_t new_vl = VecOffload::backend->consumeFofVl();
+        auto tc = xc->tcBase();
+        PCState pc;
+        set(pc, xc->pcState());
+        tc->setMiscReg(MISCREG_VSTART, 0);
+        if (traceData) {
+            traceData->setData(miscRegClass, RegVal(new_vl));
+        }
+        pc.vl(new_vl);
+        pc.new_vconf(true);
+        xc->pcState(pc);
+    }
     return NoFault;
+}
+
+std::unique_ptr<PCStateBase>
+VecOffloadMemMicroInst::branchTarget(ThreadContext *tc) const
+{
+    PCStateBase *pc_ptr = tc->pcState().clone();
+    if (mode == VecMemMode::Fof && VecOffload::backend) {
+        pc_ptr->as<PCState>().vl(VecOffload::backend->consumeFofVl());
+    }
+    return std::unique_ptr<PCStateBase>{pc_ptr};
 }
 
 std::string
@@ -1290,12 +1323,21 @@ VecOffloadMemMicroInst::generateDisassembly(Addr pc,
 
 StaticInstPtr
 makeVecOffloadMemMicroop(ExtMachInst emi, const char *mnem, uint32_t elen,
-                         uint32_t vlen, bool isStore, bool isStrided)
+                         uint32_t vlen, bool isStore, VecMemMode mode)
 {
-    panic_if(!emi.vm, "%s: masked vector memory ops are unsupported with "
-             "vector_offload until the ACT-owned VLSU (phase 2)", mnem);
+    if (emi.nf != 0) {
+        // segment access: unit-stride, LMUL=1 only (phase-2 scope).
+        // Check the encoding's mop bits: the segment constructor
+        // templates are shared across unit/strided/indexed forms.
+        panic_if(emi.mop != 0,
+                 "%s: only unit-stride segment accesses are supported "
+                 "with vector_offload", mnem);
+        panic_if(emi.vtype8.vlmul != 0,
+                 "%s: segment accesses require LMUL=1 with "
+                 "vector_offload", mnem);
+    }
     return new VecOffloadMemMicroInst(emi, mnem, elen, vlen, isStore,
-                                      isStrided);
+                                      mode);
 }
 
 StaticInstPtr

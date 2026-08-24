@@ -48,6 +48,14 @@ struct VecOffloadRecord
     uint64_t scalar = 0;
 };
 
+enum class VecMemMode : uint8_t
+{
+    Unit = 0,
+    Strided = 1,
+    Indexed = 2,     // ordered and unordered (executed sequentially)
+    Fof = 4,         // unit-stride fault-only-first
+};
+
 enum VecOffloadOpClass : uint8_t
 {
     VecOffloadArith = 0,
@@ -78,17 +86,24 @@ class VecOffloadBackend
     // oldest ready response belongs to the executing instruction).
     virtual uint64_t consumeScalarResponse() = 0;
 
-    // Vector memory (phase 1: gem5 owns all accesses; the instruction
-    // blocks at the ROB head for the whole transfer). First call for a
-    // dynamic seqNum starts the access; returns true while incomplete.
-    // base/stride are architectural register values read at the ROB
-    // head; for unit-stride accesses stride is 0. rec.funct3 carries
-    // the raw mem width bits (14:12).
+    // Vector memory: the external unit owns address generation and
+    // element traffic; gem5 services its requests. The instruction
+    // still blocks at the ROB head for the whole transfer (phase-1
+    // ordering pessimism retained). First call for a dynamic seqNum
+    // starts the access; returns true while incomplete. base/stride
+    // are architectural register values read at the ROB head.
+    // rec.funct3 carries the raw mem width bits (14:12); segment nf
+    // comes from rec.rawInst bits 31:29.
     virtual bool vecMemBlocked(uint64_t seqNum,
                                const VecOffloadRecord &rec,
                                ThreadContext *tc, uint64_t base,
                                uint64_t stride, bool isStore,
-                               bool isStrided) = 0;
+                               VecMemMode mode) = 0;
+
+    // Valid at execute() of a fault-only-first op that unblocked: the
+    // number of elements completed before the first faulting element
+    // (the new vl).
+    virtual uint32_t consumeFofVl() = 0;
 };
 
 // Process-wide state (phase 1: single backend / single offloading hart).
