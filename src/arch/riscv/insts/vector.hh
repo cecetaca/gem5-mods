@@ -33,6 +33,7 @@
 
 #include "arch/riscv/faults.hh"
 #include "arch/riscv/insts/static_inst.hh"
+#include "arch/riscv/insts/vec_offload.hh"
 #include "arch/riscv/isa.hh"
 #include "arch/riscv/regs/misc.hh"
 #include "arch/riscv/utility.hh"
@@ -820,6 +821,28 @@ class VPinVdMicroInst : public VectorArithMicroInst
         std::string generateDisassembly(
                 Addr pc, const loader::SymbolTable *symtab) const override;
 };
+
+class VecOffloadMicroInst : public VectorMicroInst
+{
+  private:
+    RegId srcRegIdxArr[1];
+    RegId destRegIdxArr[1];
+    VecOffloadRecord rec;
+    // 0 = none, 1 = int rs1, 2 = fp fs1
+    uint8_t scalarSrc;
+
+  public:
+    VecOffloadMicroInst(ExtMachInst _machInst, const char *mnem,
+                        uint32_t _elen, uint32_t _vlen);
+    Fault execute(ExecContext *, trace::InstRecord *) const override;
+    std::string generateDisassembly(
+        Addr pc, const loader::SymbolTable *symtab) const override;
+};
+
+// Factory used by the macro-op constructor templates when
+// vector_offload is active: one micro-op per architectural instruction.
+StaticInstPtr makeVecOffloadMicroop(ExtMachInst emi, const char *mnem,
+                                    uint32_t elen, uint32_t vlen);
 
 } // namespace RiscvISA
 } // namespace gem5

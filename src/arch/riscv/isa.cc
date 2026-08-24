@@ -31,6 +31,7 @@
  */
 
 #include "arch/riscv/isa.hh"
+#include "arch/riscv/insts/vec_offload.hh"
 
 #include <ctime>
 #include <set>
@@ -305,6 +306,11 @@ ISA::ISA(const Params &p) : BaseISA(p, "riscv"),
     _wfiResumeOnPending(p.wfi_resume_on_pending), _enableZcd(p.enable_Zcd),
     _enableSmrnmi(p.enable_Smrnmi)
 {
+    if (p.vector_offload) {
+        // phase-1 process-wide flag; see insts/vec_offload.hh
+        VecOffload::enabled = true;
+    }
+
     _regClasses.push_back(&intRegClass);
     _regClasses.push_back(&floatRegClass);
     _regClasses.push_back(&vecRegClass);

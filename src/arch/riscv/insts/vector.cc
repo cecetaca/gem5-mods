@@ -957,5 +957,101 @@ VPinVdMicroInst::generateDisassembly(Addr pc,
     return ss.str();
 }
 
+
+/* --- vector offload (see vec_offload.hh) --- */
+
+bool VecOffload::enabled = false;
+VecOffloadBackend *VecOffload::backend = nullptr;
+
+VecOffloadMicroInst::VecOffloadMicroInst(ExtMachInst _machInst,
+    const char *mnem, uint32_t _elen, uint32_t _vlen)
+    : VectorMicroInst(mnem, _machInst, SimdMiscOp,
+                      _machInst.vl, 0, _elen, _vlen)
+{
+    setRegIdxArrays(
+        reinterpret_cast<RegIdArrayPtr>(
+            &std::remove_pointer_t<decltype(this)>::srcRegIdxArr),
+        reinterpret_cast<RegIdArrayPtr>(
+            &std::remove_pointer_t<decltype(this)>::destRegIdxArr));
+
+    _numSrcRegs = 0;
+    _numDestRegs = 0;
+
+    rec.rawInst = _machInst.all;
+    rec.vfunct6 = _machInst.vfunct6;
+    rec.funct3 = _machInst.funct3;
+    rec.opClass = VecOffloadArith;
+    rec.vd = _machInst.rd;
+    rec.vs1 = _machInst.rs1;
+    rec.vs2 = _machInst.rs2;
+    rec.vm = _machInst.vm;
+    rec.vsew = _machInst.vtype8.vsew;
+    rec.vlmul = _machInst.vtype8.vlmul;
+    rec.vta = _machInst.vtype8.vta;
+    rec.vma = _machInst.vtype8.vma;
+    rec.vl = _machInst.vl;
+    rec.vstart = 0;  // enforced at execute
+
+    // funct3: 0=OPIVV 1=OPFVV 2=OPMVV 3=OPIVI 4=OPIVX 5=OPFVF 6=OPMVX
+    switch (rec.funct3) {
+      case 0x4:
+      case 0x6:
+        scalarSrc = 1;
+        setSrcRegIdx(_numSrcRegs++, intRegClass[_machInst.rs1]);
+        break;
+      case 0x5:
+        scalarSrc = 2;
+        setSrcRegIdx(_numSrcRegs++, floatRegClass[_machInst.rs1]);
+        break;
+      default:
+        scalarSrc = 0;
+        break;
+    }
+
+    // Non-speculative: executes only at ROB head, so no wrong-path
+    // record can reach the external unit and program order among
+    // offloads is guaranteed by in-order commit.
+    this->flags[IsNonSpeculative] = true;
+}
+
+Fault
+VecOffloadMicroInst::execute(ExecContext *xc,
+    trace::InstRecord *traceData) const
+{
+    panic_if(!VecOffload::backend,
+             "vector_offload is enabled but no VecOffloadBackend is "
+             "registered (is the ActUnit configured?)");
+
+    VecOffloadRecord r = rec;
+    RegVal vstart = xc->readMiscReg(MISCREG_VSTART);
+    if (vstart != 0) {
+        return std::make_shared<IllegalInstFault>(
+            "vector_offload: vstart != 0 unsupported (phase 1)",
+            machInst);
+    }
+    r.vstart = 0;
+    if (scalarSrc != 0) {
+        r.scalar = xc->getRegOperand(this, 0);
+    }
+    VecOffload::backend->issueArith(r);
+    return NoFault;
+}
+
+std::string
+VecOffloadMicroInst::generateDisassembly(Addr pc,
+    const loader::SymbolTable *symtab) const
+{
+    std::stringstream ss;
+    ss << mnemonic << "_voffload";
+    return ss.str();
+}
+
+StaticInstPtr
+makeVecOffloadMicroop(ExtMachInst emi, const char *mnem, uint32_t elen,
+                      uint32_t vlen)
+{
+    return new VecOffloadMicroInst(emi, mnem, elen, vlen);
+}
+
 } // namespace RiscvISA
 } // namespace gem5

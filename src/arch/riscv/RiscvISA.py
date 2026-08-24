@@ -95,6 +95,13 @@ class RiscvISA(BaseISA):
     riscv_type = Param.RiscvType("RV64", "RV32 or RV64")
 
     enable_rvv = Param.Bool(True, "Enable vector extension")
+    vector_offload = Param.Bool(
+        False,
+        "Offload RVV instructions to an external vector unit (one record "
+        "per architectural instruction; no LMUL micro-op cracking). "
+        "Requires a registered VecOffloadBackend (see "
+        "arch/riscv/insts/vec_offload.hh).",
+    )
     vlen = Param.RiscvVectorLength(
         256,
         "Length of each vector register in bits. \
