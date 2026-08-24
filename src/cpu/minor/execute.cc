@@ -1359,6 +1359,27 @@ Execute::commit(ThreadID thread_id, bool only_commit_microops, bool discard,
                             " as it wants to be stalled for %d more cycles\n",
                             *inst, inst->minimumCommitCycle - now);
                         completed_inst = false;
+                    } else if (!early_memory_issue &&
+                        inst->staticInst->isNonSpeculative() &&
+                        instIsHeadInst(inst) && !lsq.isDrained())
+                    {
+                        /* Non-speculative instructions must not start
+                         * until every older store has fully drained (the
+                         * store buffer empties long after commit), or an
+                         * external unit's access could race them */
+                        DPRINTF(MinorExecute, "Not committing inst: %s yet"
+                            " as stores are still draining\n", *inst);
+                        completed_inst = false;
+                    } else if (!early_memory_issue &&
+                        inst->staticInst->isNonSpeculative() &&
+                        instIsHeadInst(inst) &&
+                        inst->staticInst->commitBlocked(
+                            inst->id.execSeqNum,
+                            cpu.getContext(thread_id)))
+                    {
+                        /* e.g. waiting on an external co-simulated
+                         * unit's response; retried next cycle */
+                        completed_inst = false;
                     } else {
                         completed_inst = commitInst(inst,
                             early_memory_issue, branch, fault,
