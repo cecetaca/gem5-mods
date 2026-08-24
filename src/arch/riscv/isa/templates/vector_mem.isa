@@ -63,8 +63,17 @@ def template VleConstructor {{
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
-    panic_if(vecOffloadActive(),
-             "%(mnemonic)s: unsupported with vector_offload (phase 1)");
+    if (vecOffloadActive()) {
+        panic_if(_opClass == SimdUnitStrideFaultOnlyFirstLoadOp,
+                 "%(mnemonic)s: fault-only-first unsupported with "
+                 "vector_offload (phase 1)");
+        this->microops.push_back(makeVecOffloadMemMicroop(
+            _machInst, "%(mnemonic)s", this->elen, this->vlen,
+            false, false));
+        this->microops.front()->setFirstMicroop();
+        this->microops.back()->setLastMicroop();
+        return;
+    }
 
     const int32_t micro_vlmax = vlen / width_EEW(_machInst.width);
     const uint32_t num_microops = ceil((float) this->vl / (micro_vlmax));
@@ -274,8 +283,14 @@ def template VseConstructor {{
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
-    panic_if(vecOffloadActive(),
-             "%(mnemonic)s: unsupported with vector_offload (phase 1)");
+    if (vecOffloadActive()) {
+        this->microops.push_back(makeVecOffloadMemMicroop(
+            _machInst, "%(mnemonic)s", this->elen, this->vlen,
+            true, false));
+        this->microops.front()->setFirstMicroop();
+        this->microops.back()->setLastMicroop();
+        return;
+    }
 
     const int32_t micro_vlmax = vlen / width_EEW(_machInst.width);
     const uint32_t num_microops = ceil((float) this->vl / (micro_vlmax));
@@ -810,8 +825,14 @@ def template VlStrideConstructor {{
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
-    panic_if(vecOffloadActive(),
-             "%(mnemonic)s: unsupported with vector_offload (phase 1)");
+    if (vecOffloadActive()) {
+        this->microops.push_back(makeVecOffloadMemMicroop(
+            _machInst, "%(mnemonic)s", this->elen, this->vlen,
+            false, true));
+        this->microops.front()->setFirstMicroop();
+        this->microops.back()->setLastMicroop();
+        return;
+    }
 
     const uint32_t nf = _machInst.nf + 1;
     const uint32_t emul = get_emul(eew, sew, vflmul, false);
@@ -879,8 +900,14 @@ def template VsStrideConstructor {{
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
-    panic_if(vecOffloadActive(),
-             "%(mnemonic)s: unsupported with vector_offload (phase 1)");
+    if (vecOffloadActive()) {
+        this->microops.push_back(makeVecOffloadMemMicroop(
+            _machInst, "%(mnemonic)s", this->elen, this->vlen,
+            true, true));
+        this->microops.front()->setFirstMicroop();
+        this->microops.back()->setLastMicroop();
+        return;
+    }
 
     const uint32_t nf = _machInst.nf + 1;
     const uint32_t emul = get_emul(eew, sew, vflmul, false);

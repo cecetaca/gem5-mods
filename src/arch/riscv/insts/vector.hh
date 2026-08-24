@@ -877,7 +877,7 @@ class VecOffloadToScalarInst : public RiscvStaticInst
   public:
     VecOffloadToScalarInst(ExtMachInst _machInst, const char *mnem,
                            bool _fpDest);
-    bool commitBlocked(uint64_t seqNum) const override;
+    bool commitBlocked(uint64_t seqNum, ThreadContext *tc) const override;
     Fault execute(ExecContext *, trace::InstRecord *) const override;
     std::string generateDisassembly(
         Addr pc, const loader::SymbolTable *symtab) const override;
@@ -885,6 +885,32 @@ class VecOffloadToScalarInst : public RiscvStaticInst
 
 StaticInstPtr makeVecOffloadNonSplit(ExtMachInst emi, const char *mnem,
                                      uint32_t elen, uint32_t vlen);
+
+// Vector memory offload (phase 1): non-speculative, read+write barrier,
+// blocks at the ROB head for the whole transfer (gem5 owns all memory
+// accesses; ACT only consumes/produces the data).
+class VecOffloadMemMicroInst : public VectorMicroInst
+{
+  private:
+    RegId srcRegIdxArr[2];
+    RegId destRegIdxArr[1];
+    VecOffloadRecord rec;
+    bool isStore;
+    bool isStrided;
+
+  public:
+    VecOffloadMemMicroInst(ExtMachInst _machInst, const char *mnem,
+                           uint32_t _elen, uint32_t _vlen, bool _isStore,
+                           bool _isStrided);
+    bool commitBlocked(uint64_t seqNum, ThreadContext *tc) const override;
+    Fault execute(ExecContext *, trace::InstRecord *) const override;
+    std::string generateDisassembly(
+        Addr pc, const loader::SymbolTable *symtab) const override;
+};
+
+StaticInstPtr makeVecOffloadMemMicroop(ExtMachInst emi, const char *mnem,
+                                       uint32_t elen, uint32_t vlen,
+                                       bool isStore, bool isStrided);
 
 } // namespace RiscvISA
 } // namespace gem5

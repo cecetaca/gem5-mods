@@ -37,6 +37,7 @@
 #include "arch/riscv/regs/vector.hh"
 #include "arch/riscv/utility.hh"
 #include "cpu/static_inst.hh"
+#include "cpu/thread_context.hh"
 
 namespace gem5
 {
@@ -1161,7 +1162,8 @@ VecOffloadToScalarInst::VecOffloadToScalarInst(ExtMachInst _machInst,
 }
 
 bool
-VecOffloadToScalarInst::commitBlocked(uint64_t seqNum) const
+VecOffloadToScalarInst::commitBlocked(uint64_t seqNum,
+                                      ThreadContext *tc) const
 {
     panic_if(!VecOffload::backend,
              "vector_offload is enabled but no VecOffloadBackend is "
@@ -1213,6 +1215,85 @@ makeVecOffloadNonSplit(ExtMachInst emi, const char *mnem, uint32_t elen,
         panic("makeVecOffloadNonSplit: unexpected funct3 %#x",
               (int)emi.funct3);
     }
+}
+
+VecOffloadMemMicroInst::VecOffloadMemMicroInst(ExtMachInst _machInst,
+    const char *mnem, uint32_t _elen, uint32_t _vlen, bool _isStore,
+    bool _isStrided)
+    : VectorMicroInst(mnem, _machInst, SimdMiscOp,
+                      _machInst.vl, 0, _elen, _vlen),
+      isStore(_isStore), isStrided(_isStrided)
+{
+    setRegIdxArrays(
+        reinterpret_cast<RegIdArrayPtr>(
+            &std::remove_pointer_t<decltype(this)>::srcRegIdxArr),
+        reinterpret_cast<RegIdArrayPtr>(
+            &std::remove_pointer_t<decltype(this)>::destRegIdxArr));
+    _numSrcRegs = 0;
+    _numDestRegs = 0;
+
+    rec = buildVecOffloadRecord(_machInst);
+    // for mem ops funct3 carries the raw width bits; vd doubles as vs3
+    // for stores
+    rec.funct3 = _machInst.width;
+    rec.opClass = isStore ? VecOffloadStore : VecOffloadLoad;
+
+    // declared for rename/dependence tracking; the architectural values
+    // are read at the ROB head via the ThreadContext
+    setSrcRegIdx(_numSrcRegs++, intRegClass[_machInst.rs1]);
+    if (isStrided) {
+        setSrcRegIdx(_numSrcRegs++, intRegClass[_machInst.rs2]);
+    }
+
+    this->flags[IsVector] = true;
+    this->flags[IsNonSpeculative] = true;
+    // full serialization against scalar memory (phase-1 pessimism)
+    this->flags[IsReadBarrier] = true;
+    this->flags[IsWriteBarrier] = true;
+}
+
+bool
+VecOffloadMemMicroInst::commitBlocked(uint64_t seqNum,
+                                      ThreadContext *tc) const
+{
+    panic_if(!VecOffload::backend,
+             "vector_offload is enabled but no VecOffloadBackend is "
+             "registered");
+    uint64_t base = tc->getReg(intRegClass[machInst.rs1]);
+    uint64_t stride =
+        isStrided ? tc->getReg(intRegClass[machInst.rs2]) : 0;
+    return VecOffload::backend->vecMemBlocked(seqNum, rec, tc, base,
+                                              stride, isStore, isStrided);
+}
+
+Fault
+VecOffloadMemMicroInst::execute(ExecContext *xc,
+    trace::InstRecord *traceData) const
+{
+    if (xc->readMiscReg(MISCREG_VSTART) != 0) {
+        return std::make_shared<IllegalInstFault>(
+            "vector_offload: vstart != 0 unsupported (phase 1)",
+            machInst);
+    }
+    // the transfer completed while blocked at the ROB head
+    return NoFault;
+}
+
+std::string
+VecOffloadMemMicroInst::generateDisassembly(Addr pc,
+    const loader::SymbolTable *symtab) const
+{
+    std::stringstream ss;
+    ss << mnemonic << "_voffload";
+    return ss.str();
+}
+
+StaticInstPtr
+makeVecOffloadMemMicroop(ExtMachInst emi, const char *mnem, uint32_t elen,
+                         uint32_t vlen, bool isStore, bool isStrided)
+{
+    return new VecOffloadMemMicroInst(emi, mnem, elen, vlen, isStore,
+                                      isStrided);
 }
 
 StaticInstPtr
