@@ -63,6 +63,8 @@ def template VleConstructor {{
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    panic_if(vecOffloadActive(),
+             "%(mnemonic)s: unsupported with vector_offload (phase 1)");
 
     const int32_t micro_vlmax = vlen / width_EEW(_machInst.width);
     const uint32_t num_microops = ceil((float) this->vl / (micro_vlmax));
@@ -272,6 +274,8 @@ def template VseConstructor {{
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    panic_if(vecOffloadActive(),
+             "%(mnemonic)s: unsupported with vector_offload (phase 1)");
 
     const int32_t micro_vlmax = vlen / width_EEW(_machInst.width);
     const uint32_t num_microops = ceil((float) this->vl / (micro_vlmax));
@@ -453,6 +457,8 @@ def template VlmConstructor {{
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    panic_if(vecOffloadActive(),
+             "%(mnemonic)s: unsupported with vector_offload (phase 1)");
 
     int32_t micro_vl = (this->vl + 7) / 8;
     StaticInstPtr microop;
@@ -480,6 +486,8 @@ def template VsmConstructor {{
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    panic_if(vecOffloadActive(),
+             "%(mnemonic)s: unsupported with vector_offload (phase 1)");
 
     int32_t micro_vl = (this->vl + 7) / 8;
 
@@ -507,6 +515,8 @@ def template VsWholeConstructor {{
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    panic_if(vecOffloadActive(),
+             "%(mnemonic)s: unsupported with vector_offload (phase 1)");
 
     size_t NFIELDS = machInst.nf + 1;
     const int32_t micro_vlmax = vlen / width_EEW(_machInst.width);
@@ -643,6 +653,8 @@ def template VlWholeConstructor {{
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    panic_if(vecOffloadActive(),
+             "%(mnemonic)s: unsupported with vector_offload (phase 1)");
 
     size_t NFIELDS = machInst.nf + 1;
 
@@ -798,6 +810,8 @@ def template VlStrideConstructor {{
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    panic_if(vecOffloadActive(),
+             "%(mnemonic)s: unsupported with vector_offload (phase 1)");
 
     const uint32_t nf = _machInst.nf + 1;
     const uint32_t emul = get_emul(eew, sew, vflmul, false);
@@ -865,6 +879,8 @@ def template VsStrideConstructor {{
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    panic_if(vecOffloadActive(),
+             "%(mnemonic)s: unsupported with vector_offload (phase 1)");
 
     const uint32_t nf = _machInst.nf + 1;
     const uint32_t emul = get_emul(eew, sew, vflmul, false);
@@ -926,6 +942,8 @@ template<typename ElemType>
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    panic_if(vecOffloadActive(),
+             "%(mnemonic)s: unsupported with vector_offload (phase 1)");
 
     const uint32_t vd_eewb = sizeof(ElemType);
     const uint32_t vs2_eewb = width_EEW(_machInst.width) / 8;
@@ -1171,6 +1189,8 @@ template<typename ElemType>
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    panic_if(vecOffloadActive(),
+             "%(mnemonic)s: unsupported with vector_offload (phase 1)");
 
     const uint32_t vs3_eewb = sizeof(ElemType);
     const uint32_t vs2_eewb = width_EEW(_machInst.width) / 8;
@@ -1371,6 +1391,8 @@ def template VlSegConstructor {{
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    panic_if(vecOffloadActive(),
+             "%(mnemonic)s: unsupported with vector_offload (phase 1)");
 
     const int32_t micro_vlmax = vlen / width_EEW(_machInst.width);
     const uint32_t num_microops = ceil((float) this->vl / (micro_vlmax));
@@ -1629,6 +1651,8 @@ def template VsSegConstructor {{
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    panic_if(vecOffloadActive(),
+             "%(mnemonic)s: unsupported with vector_offload (phase 1)");
 
     const int32_t micro_vlmax = vlen / width_EEW(_machInst.width);
     const uint32_t num_microops = ceil((float) this->vl / (micro_vlmax));

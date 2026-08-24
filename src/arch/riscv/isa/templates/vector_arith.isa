@@ -111,6 +111,14 @@ template<typename ElemType>
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    if (vecOffloadActive()) {
+        this->microops.push_back(
+            makeVecOffloadMicroop(_machInst, "%(mnemonic)s",
+                                  this->elen, this->vlen));
+        this->microops.front()->setFirstMicroop();
+        this->microops.back()->setLastMicroop();
+        return;
+    }
     const uint32_t num_microops = vtype_regs_per_group(vtype);
     int32_t tmp_vl = this->vl;
     const int32_t micro_vlmax = vtype_VLMAX(_machInst.vtype8, vlen, true);
@@ -371,6 +379,14 @@ template<typename ElemType>
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    if (vecOffloadActive()) {
+        this->microops.push_back(
+            makeVecOffloadMicroop(_machInst, "%(mnemonic)s",
+                                  this->elen, this->vlen));
+        this->microops.front()->setFirstMicroop();
+        this->microops.back()->setLastMicroop();
+        return;
+    }
     const int64_t vlmul = vtype_vlmul(_machInst.vtype8);
     // when LMUL setted as m1, need to split to 2 micro insts
     const uint32_t num_microops = 1 << std::max<int64_t>(0, vlmul + 1);
@@ -498,6 +514,14 @@ template<typename ElemType>
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    if (vecOffloadActive()) {
+        this->microops.push_back(
+            makeVecOffloadMicroop(_machInst, "%(mnemonic)s",
+                                  this->elen, this->vlen));
+        this->microops.front()->setFirstMicroop();
+        this->microops.back()->setLastMicroop();
+        return;
+    }
     const int64_t vlmul = vtype_vlmul(_machInst.vtype8);
     // when LMUL setted as m1, need to split to 2 micro insts
     const uint32_t num_microops = 1 << std::max<int64_t>(0, vlmul + 1);
@@ -628,6 +652,14 @@ template<typename ElemType>
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    if (vecOffloadActive()) {
+        this->microops.push_back(
+            makeVecOffloadMicroop(_machInst, "%(mnemonic)s",
+                                  this->elen, this->vlen));
+        this->microops.front()->setFirstMicroop();
+        this->microops.back()->setLastMicroop();
+        return;
+    }
     const uint32_t num_microops = vtype_regs_per_group(vtype);
     int32_t tmp_vl = this->vl;
     const int32_t micro_vlmax = vtype_VLMAX(_machInst.vtype8, vlen, true);
@@ -921,6 +953,14 @@ template<typename ElemType>
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    if (vecOffloadActive()) {
+        this->microops.push_back(
+            makeVecOffloadMicroop(_machInst, "%(mnemonic)s",
+                                  this->elen, this->vlen));
+        this->microops.front()->setFirstMicroop();
+        this->microops.back()->setLastMicroop();
+        return;
+    }
     const uint32_t num_microops = vtype_regs_per_group(vtype);
     int32_t tmp_vl = this->vl;
     const int32_t micro_vlmax = vtype_VLMAX(_machInst.vtype8, vlen, true);
@@ -1169,6 +1209,14 @@ template<typename ElemType>
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    if (vecOffloadActive()) {
+        this->microops.push_back(
+            makeVecOffloadMicroop(_machInst, "%(mnemonic)s",
+                                  this->elen, this->vlen));
+        this->microops.front()->setFirstMicroop();
+        this->microops.back()->setLastMicroop();
+        return;
+    }
     const uint32_t num_microops = vtype_regs_per_group(vtype);
     int32_t tmp_vl = this->vl;
     const int32_t micro_vlmax = vtype_VLMAX(_machInst.vtype8, vlen, true);
@@ -1290,6 +1338,14 @@ template<typename ElemType>
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    if (vecOffloadActive()) {
+        this->microops.push_back(
+            makeVecOffloadMicroop(_machInst, "%(mnemonic)s",
+                                  this->elen, this->vlen));
+        this->microops.front()->setFirstMicroop();
+        this->microops.back()->setLastMicroop();
+        return;
+    }
     const uint32_t num_microops = vtype_regs_per_group(vtype);
     int32_t tmp_vl = this->vl;
     const int32_t micro_vlmax = vtype_VLMAX(_machInst.vtype8, vlen, true);
@@ -1408,6 +1464,8 @@ def template VMvWholeMacroConstructor {{
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    panic_if(vecOffloadActive(),
+             "%(mnemonic)s: unsupported with vector_offload (phase 1)");
     const uint32_t num_microops = _machInst.simm3 + 1;
     StaticInstPtr microop;
 
@@ -1578,6 +1636,8 @@ template<typename ElemType>
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    panic_if(vecOffloadActive(),
+             "%(mnemonic)s: unsupported with vector_offload (phase 1)");
     %(set_vm_idx)s;
     %(set_src_reg_idx)s;
 }
@@ -1687,6 +1747,14 @@ template<typename ElemType>
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    if (vecOffloadActive()) {
+        this->microops.push_back(
+            makeVecOffloadMicroop(_machInst, "%(mnemonic)s",
+                                  this->elen, this->vlen));
+        this->microops.front()->setFirstMicroop();
+        this->microops.back()->setLastMicroop();
+        return;
+    }
     const uint32_t num_microops = vtype_regs_per_group(vtype);
     int32_t tmp_vl = this->vl;
     const int32_t micro_vlmax = vtype_VLMAX(_machInst.vtype8, vlen, true);
@@ -1942,6 +2010,14 @@ template<typename ElemType, typename IndexType>
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    if (vecOffloadActive()) {
+        this->microops.push_back(
+            makeVecOffloadMicroop(_machInst, "%(mnemonic)s",
+                                  this->elen, this->vlen));
+        this->microops.front()->setFirstMicroop();
+        this->microops.back()->setLastMicroop();
+        return;
+    }
     constexpr uint32_t vd_eewb = sizeof(ElemType);
     constexpr uint32_t vs2_eewb = sizeof(ElemType);
     constexpr uint32_t vs1_eewb = sizeof(IndexType);
@@ -2148,6 +2224,8 @@ template<typename ElemType>
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    panic_if(vecOffloadActive(),
+             "%(mnemonic)s: unsupported with vector_offload (phase 1)");
     const uint32_t num_microops = vtype_regs_per_group(vtype);
     int32_t tmp_vl = this->vl;
     const int32_t micro_vlmax = vtype_VLMAX(_machInst.vtype8, vlen, true);
@@ -2274,6 +2352,14 @@ template<typename ElemType>
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    if (vecOffloadActive()) {
+        this->microops.push_back(
+            makeVecOffloadMicroop(_machInst, "%(mnemonic)s",
+                                  this->elen, this->vlen));
+        this->microops.front()->setFirstMicroop();
+        this->microops.back()->setLastMicroop();
+        return;
+    }
     const uint32_t num_microops = vtype_regs_per_group(vtype);
     int32_t tmp_vl = this->vl;
     const int32_t micro_vlmax = vtype_VLMAX(_machInst.vtype8, vlen, true);
@@ -2331,6 +2417,14 @@ template<typename ElemType>
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    if (vecOffloadActive()) {
+        this->microops.push_back(
+            makeVecOffloadMicroop(_machInst, "%(mnemonic)s",
+                                  this->elen, this->vlen));
+        this->microops.front()->setFirstMicroop();
+        this->microops.back()->setLastMicroop();
+        return;
+    }
     const uint32_t num_microops = vtype_regs_per_group(vtype);
     int32_t tmp_vl = this->vl;
     const int32_t micro_vlmax = vtype_VLMAX(_machInst.vtype8, vlen, true);
@@ -2385,6 +2479,14 @@ template<typename ElemType>
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    if (vecOffloadActive()) {
+        this->microops.push_back(
+            makeVecOffloadMicroop(_machInst, "%(mnemonic)s",
+                                  this->elen, this->vlen));
+        this->microops.front()->setFirstMicroop();
+        this->microops.back()->setLastMicroop();
+        return;
+    }
     const uint32_t num_microops = vtype_regs_per_group(vtype);
     int32_t tmp_vl = this->vl;
     const int32_t micro_vlmax = vtype_VLMAX(_machInst.vtype8, vlen, true);
@@ -2444,6 +2546,14 @@ template<typename ElemType>
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    if (vecOffloadActive()) {
+        this->microops.push_back(
+            makeVecOffloadMicroop(_machInst, "%(mnemonic)s",
+                                  this->elen, this->vlen));
+        this->microops.front()->setFirstMicroop();
+        this->microops.back()->setLastMicroop();
+        return;
+    }
     const int num_microops = vtype_regs_per_group(vtype);
     int32_t tmp_vl = this->vl;
     const int32_t micro_vlmax = vtype_VLMAX(_machInst.vtype8, vlen, true);
@@ -2510,6 +2620,14 @@ template<typename ElemType>
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
+    if (vecOffloadActive()) {
+        this->microops.push_back(
+            makeVecOffloadMicroop(_machInst, "%(mnemonic)s",
+                                  this->elen, this->vlen));
+        this->microops.front()->setFirstMicroop();
+        this->microops.back()->setLastMicroop();
+        return;
+    }
     const int num_microops = vtype_regs_per_group(vtype);
     int32_t tmp_vl = this->vl;
     const int32_t micro_vlmax = vtype_VLMAX(_machInst.vtype8, vlen, true);
