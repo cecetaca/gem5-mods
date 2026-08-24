@@ -1130,7 +1130,8 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                 "at the head of the ROB, PC %s.\n",
                 tid, head_inst->seqNum, head_inst->pcState());
 
-        if (head_inst->staticInst->commitBlocked(head_inst->seqNum)) {
+        if (head_inst->staticInst->commitBlocked(head_inst->seqNum,
+                                                  cpu->tcBase(tid))) {
             // e.g. waiting on an external co-simulated unit's response
             return false;
         }

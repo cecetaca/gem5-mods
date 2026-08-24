@@ -302,7 +302,7 @@ class StaticInst : public RefCounted, public StaticInstFlags
      * number identifies the dynamic instance (StaticInsts are shared).
      */
     virtual bool
-    commitBlocked(uint64_t seqNum) const
+    commitBlocked(uint64_t seqNum, ThreadContext *tc) const
     {
         return false;
     }
