@@ -1198,7 +1198,8 @@ IEW::executeInsts()
                 // AMOs are treated like store requests
                 fault = ldstQueue.executeStore(inst);
 
-                if (inst->isTranslationDelayed() &&
+                if ((inst->isTranslationDelayed() ||
+                     inst->isMemInterlocked()) &&
                     fault == NoFault) {
                     // A hw page table walk is currently going on; the
                     // instruction must be deferred.
@@ -1212,7 +1213,8 @@ IEW::executeInsts()
                 // event adds the instruction to the queue to commit
                 fault = ldstQueue.executeLoad(inst);
 
-                if (inst->isTranslationDelayed() &&
+                if ((inst->isTranslationDelayed() ||
+                     inst->isMemInterlocked()) &&
                     fault == NoFault) {
                     // A hw page table walk is currently going on; the
                     // instruction must be deferred.
@@ -1228,7 +1230,8 @@ IEW::executeInsts()
             } else if (inst->isStore()) {
                 fault = ldstQueue.executeStore(inst);
 
-                if (inst->isTranslationDelayed() &&
+                if ((inst->isTranslationDelayed() ||
+                     inst->isMemInterlocked()) &&
                     fault == NoFault) {
                     // A hw page table walk is currently going on; the
                     // instruction must be deferred.

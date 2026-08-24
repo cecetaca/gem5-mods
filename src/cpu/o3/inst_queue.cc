@@ -1251,7 +1251,10 @@ InstructionQueue::getDeferredMemInstToExecute()
 {
     for (ListIt it = deferredMemInsts.begin(); it != deferredMemInsts.end();
          ++it) {
-        if ((*it)->translationCompleted() || (*it)->isSquashed()) {
+        if ((*it)->translationCompleted() || (*it)->isSquashed() ||
+            (*it)->isMemInterlocked()) {
+            // interlocked accesses never started translation; re-execute
+            // them each cycle to poll the external interlock
             DynInstPtr mem_inst = std::move(*it);
             deferredMemInsts.erase(it);
             return mem_inst;

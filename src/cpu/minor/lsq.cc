@@ -37,6 +37,8 @@
 
 #include "cpu/minor/lsq.hh"
 
+#include "cpu/external_mem_interlock.hh"
+
 #include <iomanip>
 #include <sstream>
 
@@ -1021,6 +1023,18 @@ LSQ::tryToSendToTransfers(LSQRequestPtr request)
         request->setState(LSQRequest::Complete);
         request->setSkipped();
         moveFromRequestsToTransfers(request);
+        return;
+    }
+
+    /* External memory interlock: hold the access while an external
+     *  unit's in-flight range overlaps it (wrong-stream requests were
+     *  already aborted above; needsToTick keeps retrying each cycle) */
+    if (ExternalMemInterlock::conflicts(request->request->getVaddr(),
+                                        request->request->getSize())) {
+        DPRINTF(MinorMem, "Request stalled by external mem interlock\n");
+        ExternalMemInterlock::onRelease = [this] {
+            cpu.wakeupOnEvent(Pipeline::ExecuteStageId);
+        };
         return;
     }
 

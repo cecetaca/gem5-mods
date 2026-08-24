@@ -106,6 +106,7 @@ SimObject('TimingExpr.py', sim_objects=[
 
 Source('activity.cc')
 Source('base.cc')
+Source('external_mem_interlock.cc')
 Source('exetrace.cc')
 Source('inteltrace.cc')
 Source('nativetrace.cc')

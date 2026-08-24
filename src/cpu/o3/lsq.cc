@@ -41,6 +41,8 @@
 
 #include "cpu/o3/lsq.hh"
 
+#include "cpu/external_mem_interlock.hh"
+
 #include <algorithm>
 #include <list>
 #include <string>
@@ -761,6 +763,19 @@ LSQ::pushRequest(const DynInstPtr& inst, bool isLoad, uint8_t *data,
     // Atomic request has a corresponding pointer to its atomic memory
     // operation
     [[maybe_unused]] bool isAtomic = !isLoad && amo_op;
+
+    // External memory interlock: while an external unit's in-flight
+    // access overlaps this address range, defer the access before any
+    // state is created (retried each cycle like a delayed translation).
+    if (!inst->translationStarted() &&
+        ExternalMemInterlock::conflicts(addr, size)) {
+        inst->setMemInterlocked(true);
+        ExternalMemInterlock::onRelease = [cpu=this->cpu] {
+            cpu->wakeCPU();
+        };
+        return NoFault;
+    }
+    inst->setMemInterlocked(false);
 
     ThreadID tid = cpu->contextToThread(inst->contextId());
     auto cacheLineSize = cpu->cacheLineSize();

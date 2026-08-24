@@ -620,6 +620,9 @@ LSQUnit::executeLoad(const DynInstPtr &inst)
 
     load_fault = inst->initiateAcc();
 
+    if (inst->isMemInterlocked() && load_fault == NoFault)
+        return NoFault;
+
     if (load_fault == NoFault && !inst->readMemAccPredicate()) {
         assert(inst->readPredicate());
         inst->setExecuted();
@@ -692,6 +695,9 @@ LSQUnit::executeStore(const DynInstPtr &store_inst)
     typename LoadQueue::iterator loadIt = store_inst->lqIt;
 
     Fault store_fault = store_inst->initiateAcc();
+
+    if (store_inst->isMemInterlocked() && store_fault == NoFault)
+        return NoFault;
 
     if (store_inst->isTranslationDelayed() &&
         store_fault == NoFault)

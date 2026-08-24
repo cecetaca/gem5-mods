@@ -443,6 +443,12 @@ class DynInst : public ExecContext, public RefCounted
     bool hitExternalSnoop() const { return instFlags[HitExternalSnoop]; }
     void hitExternalSnoop(bool f) { instFlags[HitExternalSnoop] = f; }
 
+    /** The access is deferred by the external memory interlock (an
+     * external unit's in-flight range overlaps); retried like a delayed
+     * translation. */
+    bool isMemInterlocked() const { return memInterlockedFlag; }
+    void setMemInterlocked(bool f) { memInterlockedFlag = f; }
+
     /**
      * Returns true if the DTB address translation is being delayed due to a hw
      * page table walk.
@@ -452,6 +458,10 @@ class DynInst : public ExecContext, public RefCounted
     {
         return (translationStarted() && !translationCompleted());
     }
+
+  private:
+    /** see isMemInterlocked() */
+    bool memInterlockedFlag = false;
 
   public:
 #ifdef GEM5_DEBUG
