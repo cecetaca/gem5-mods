@@ -50,7 +50,10 @@ from m5.params import (
 
 class RiscvVectorLength(UInt32):
     min = 8
-    max = 524288
+    # 4 Mib = 512 KiB per register: 131072 32-bit elements at LMUL=1.
+    # Must not exceed MaxVecLenInBits (arch/riscv/types.hh), which is in
+    # turn capped by MaxVecRegLenInBytes (arch/generic/vec_reg.hh).
+    max = 4194304
 
     def _check(self):
         super()._check()

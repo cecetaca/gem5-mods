@@ -112,7 +112,11 @@
 namespace gem5
 {
 
-constexpr unsigned MaxVecRegLenInBytes = 1ULL << 16; // 2^16 bytes
+// Raised from 2^16 so a RISC-V vector register can hold 131072 32-bit
+// elements at LMUL=1 (512 KiB per register). This is the ceiling every
+// ISA's VecRegContainer is sized against, so it costs memory in the
+// physical register file: gem5's O3 allocates numPhysVecRegs of these.
+constexpr unsigned MaxVecRegLenInBytes = 1ULL << 19; // 2^19 bytes
 
 /**
  * Vector Register Abstraction

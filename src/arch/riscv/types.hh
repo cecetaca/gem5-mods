@@ -186,10 +186,15 @@ BitUnion64(ExtMachInst)
 EndBitUnion(ExtMachInst)
 
 // Raised from 65536 so an offloaded vector unit can be configured with
-// registers large enough for 2**17 32-bit elements at LMUL=8. This sizes
-// gem5's own VecRegContainer, so it costs memory in the physical
-// register file even when the vector state actually lives elsewhere.
-constexpr unsigned MaxVecLenInBits = 524288;
+// registers large enough for 2**17 32-bit elements. 524288 bits reached
+// that only at LMUL=8; 4 Mib reaches it with LMUL=1, i.e. with a single
+// architectural register holding all 131072 elements, which is what a
+// flat lane array (CAPE and friends) actually looks like -- there is no
+// register group to gang, the array IS the register.
+// This sizes gem5's own VecRegContainer, so it costs memory in the
+// physical register file even though the vector state lives elsewhere:
+// 512 KiB per physical vector register at this setting.
+constexpr unsigned MaxVecLenInBits = 4194304;
 constexpr unsigned MaxVecLenInBytes  = MaxVecLenInBits >> 3;
 
 
