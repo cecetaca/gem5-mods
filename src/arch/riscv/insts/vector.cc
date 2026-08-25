@@ -1011,6 +1011,19 @@ VecOffloadMicroInst::VecOffloadMicroInst(ExtMachInst _machInst,
         break;
     }
 
+    // funct6 0x17 is vmerge/vmv.v.*: one opcode whose source is a
+    // vector register when the form is OPIVV, or whenever it is masked
+    // (the mask selects between two vector operands). Those are moves
+    // of register contents, not arithmetic; the unmasked scalar and
+    // immediate forms are plain broadcasts and stay arithmetic.
+    if ((rec.vfunct6 == 0x17 && (rec.funct3 == 0x0 || rec.vm == 0)) ||
+        (rec.vfunct6 == 0x27 && rec.funct3 == 0x3)) {
+        // ...and funct6 0x27 in the OPIVI slot is vmvNr.v, the
+        // whole-register move: also a register-to-register copy, just
+        // one that ignores vl and vtype entirely.
+        rec.opClass = VecOffloadCopy;
+    }
+
     // Deliberately NOT IsNonSpeculative: the record is emitted from
     // the commit stage (commitOffload below), which provides the same
     // three guarantees head-execution used to buy -- wrong-path
@@ -1522,6 +1535,17 @@ VecMemIssueMicroInst::generateDisassembly(Addr pc,
     std::stringstream ss;
     ss << mnemonic << "_voffload";
     return ss.str();
+}
+
+// Whole-register move (vmvNr.v): a raw copy of nf registers that
+// ignores vl and vtype entirely. Same offload micro-op, tagged as a
+// copy, with nf carried in the record so the external unit knows how
+// much to move.
+StaticInstPtr
+makeVecOffloadCopyMicroop(ExtMachInst emi, const char *mnem, uint32_t elen,
+                          uint32_t vlen)
+{
+    return new VecOffloadMicroInst(emi, mnem, elen, vlen);
 }
 
 std::vector<StaticInstPtr>

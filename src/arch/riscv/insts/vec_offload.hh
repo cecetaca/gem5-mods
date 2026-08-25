@@ -63,6 +63,15 @@ enum VecOffloadOpClass : uint8_t
     VecOffloadStore = 2,
     VecOffloadToScalar = 3,
     VecOffloadConfig = 4,
+    // A move whose source is a vector REGISTER: vmv.v.v, the vmerge
+    // forms, and the whole-register vmvNr.v. Kept distinct from
+    // arithmetic because such a move may need a path the execution
+    // datapath does not have -- an in-memory array that computes in
+    // place has no register-to-register route -- so the external unit
+    // may have to run it as a transfer through its load/store engine.
+    // The unmasked vmv.v.x / vmv.v.i splats are NOT in this class:
+    // their source is a scalar or an immediate from the CPU.
+    VecOffloadCopy = 5,
 };
 
 class VecOffloadBackend

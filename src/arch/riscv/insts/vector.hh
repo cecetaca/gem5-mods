@@ -845,6 +845,10 @@ class VecOffloadMicroInst : public VectorMicroInst
 StaticInstPtr makeVecOffloadMicroop(ExtMachInst emi, const char *mnem,
                                     uint32_t elen, uint32_t vlen);
 
+// Whole-register move (vmvNr.v) as a single tagged copy record.
+StaticInstPtr makeVecOffloadCopyMicroop(ExtMachInst emi, const char *mnem,
+                                        uint32_t elen, uint32_t vlen);
+
 // Non-split offload instructions (vmv.x.s / vfmv.f.s / vmv.s.x /
 // vfmv.s.f): plain StaticInsts, dispatched by the NonSplit decode
 // blocks when vector_offload is active.
