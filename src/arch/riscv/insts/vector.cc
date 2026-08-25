@@ -1391,6 +1391,15 @@ VecOffloadMemMicroInst::VecOffloadMemMicroInst(ExtMachInst _machInst,
     // for mem ops funct3 carries the raw width bits; vd doubles as vs3
     // for stores
     rec.funct3 = _machInst.width;
+    if (mode == VecMemMode::Whole) {
+        // A whole-register transfer is nf * VLENB bytes and ignores
+        // vtype entirely, so describe it to the external unit as a
+        // unit-stride byte move: EEW=8 (funct3 encoding 0), unmasked,
+        // and vl in BYTES rather than elements.
+        rec.funct3 = 0;
+        rec.vm = 1;
+        rec.vl = (_vlen / 8) * (_machInst.nf + 1);
+    }
     rec.opClass = isStore ? VecOffloadStore : VecOffloadLoad;
 
     // declared for rename/dependence tracking; the architectural values
@@ -1493,6 +1502,15 @@ VecMemIssueMicroInst::VecMemIssueMicroInst(ExtMachInst _machInst,
 
     rec = buildVecOffloadRecord(_machInst);
     rec.funct3 = _machInst.width;
+    if (mode == VecMemMode::Whole) {
+        // A whole-register transfer is nf * VLENB bytes and ignores
+        // vtype entirely, so describe it to the external unit as a
+        // unit-stride byte move: EEW=8 (funct3 encoding 0), unmasked,
+        // and vl in BYTES rather than elements.
+        rec.funct3 = 0;
+        rec.vm = 1;
+        rec.vl = (_vlen / 8) * (_machInst.nf + 1);
+    }
     rec.opClass = isStore ? VecOffloadStore : VecOffloadLoad;
 
     setSrcRegIdx(_numSrcRegs++, intRegClass[_machInst.rs1]);

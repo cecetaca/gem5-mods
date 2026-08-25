@@ -54,6 +54,14 @@ enum class VecMemMode : uint8_t
     Strided = 1,
     Indexed = 2,     // ordered and unordered (executed sequentially)
     Fof = 4,         // unit-stride fault-only-first
+    // Whole-register load/store (vl<n>re<eew>.v, vs<n>r.v): a raw
+    // contiguous copy of nf whole registers that ignores vl and vtype.
+    // The compiler emits these to SPILL vector registers, so a kernel
+    // with enough live vector values needs them even though the source
+    // never mentions them. Carried as its own mode because the record's
+    // vl and EEW cannot come from vtype: the transfer is always
+    // nf * VLENB bytes.
+    Whole = 5,
 };
 
 enum VecOffloadOpClass : uint8_t

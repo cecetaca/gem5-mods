@@ -532,8 +532,20 @@ def template VsWholeConstructor {{
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
-    panic_if(vecOffloadActive(),
-             "%(mnemonic)s: unsupported with vector_offload (phase 1)");
+    if (vecOffloadActive()) {
+        // whole-register load/store: the compiler emits these to spill
+        // vector registers, so any kernel with enough live vector
+        // values needs them offloaded even though the source never
+        // names them.
+        for (auto &vm_uop : makeVecOffloadMemMicroops(
+                 _machInst, "%(mnemonic)s", this->elen, this->vlen,
+                 true, VecMemMode::Whole)) {
+            this->microops.push_back(vm_uop);
+        }
+        this->microops.front()->setFirstMicroop();
+        this->microops.back()->setLastMicroop();
+        return;
+    }
 
     size_t NFIELDS = machInst.nf + 1;
     const int32_t micro_vlmax = vlen / width_EEW(_machInst.width);
@@ -670,8 +682,20 @@ def template VlWholeConstructor {{
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
-    panic_if(vecOffloadActive(),
-             "%(mnemonic)s: unsupported with vector_offload (phase 1)");
+    if (vecOffloadActive()) {
+        // whole-register load/store: the compiler emits these to spill
+        // vector registers, so any kernel with enough live vector
+        // values needs them offloaded even though the source never
+        // names them.
+        for (auto &vm_uop : makeVecOffloadMemMicroops(
+                 _machInst, "%(mnemonic)s", this->elen, this->vlen,
+                 false, VecMemMode::Whole)) {
+            this->microops.push_back(vm_uop);
+        }
+        this->microops.front()->setFirstMicroop();
+        this->microops.back()->setLastMicroop();
+        return;
+    }
 
     size_t NFIELDS = machInst.nf + 1;
 
