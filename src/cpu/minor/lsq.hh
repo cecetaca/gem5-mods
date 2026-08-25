@@ -701,6 +701,17 @@ class LSQ : public Named
     /** Is there nothing left in the LSQ */
     bool isDrained();
 
+    /** Have all COMMITTED stores reached memory? This is deliberately
+     *  narrower than isDrained(): it excludes the requests/transfers
+     *  queues, which also hold accesses from instructions YOUNGER than
+     *  the head. Gating the head instruction on isDrained() deadlocks,
+     *  because those younger accesses cannot retire until the head
+     *  commits, and the head is waiting for them. Since Minor commits
+     *  in order, everything older than the head has already committed,
+     *  so "older stores have drained" is exactly an empty store
+     *  buffer. */
+    bool storesDrained() const { return storeBuffer.isDrained(); }
+
     /** May need to be ticked next cycle as one of the queues contains
      *  an actionable transfers or address translation */
     bool needsToTick();

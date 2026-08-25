@@ -1360,13 +1360,31 @@ Execute::commit(ThreadID thread_id, bool only_commit_microops, bool discard,
                             *inst, inst->minimumCommitCycle - now);
                         completed_inst = false;
                     } else if (!early_memory_issue &&
-                        inst->staticInst->isNonSpeculative() &&
-                        instIsHeadInst(inst) && !lsq.isDrained())
+                        inst->staticInst->isVector() &&
+                        instIsHeadInst(inst) && !lsq.storesDrained())
                     {
-                        /* Non-speculative instructions must not start
+                        /* An offloaded vector instruction must not start
                          * until every older store has fully drained (the
-                         * store buffer empties long after commit), or an
-                         * external unit's access could race them */
+                         * store buffer empties long after commit), or the
+                         * external unit's access could race them. This
+                         * restores the "older stores drained" gate that
+                         * O3 gets for free.
+                         *
+                         * Two things here are load-bearing.
+                         *
+                         * storesDrained(), not isDrained(): the latter
+                         * also counts requests/transfers belonging to
+                         * instructions YOUNGER than the head, which
+                         * cannot retire until the head commits. Gating
+                         * the head on them is a circular wait. Older
+                         * stores are exactly the committed ones in the
+                         * store buffer, since Minor commits in order.
+                         *
+                         * isVector(), not isNonSpeculative(): a syscall
+                         * is non-speculative too, and it has no business
+                         * waiting for an external unit. Both spellings
+                         * deadlocked -- an ecall after a store in musl's
+                         * __init_tp, and later a bare vsetvli. */
                         DPRINTF(MinorExecute, "Not committing inst: %s yet"
                             " as stores are still draining\n", *inst);
                         completed_inst = false;
