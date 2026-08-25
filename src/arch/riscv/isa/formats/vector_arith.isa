@@ -1191,7 +1191,7 @@ def format Vector1Vs1RdMaskFormat(code, category, *flags){{
     header_output = Vector1Vs1RdMaskDeclare.subst(iop)
     decoder_output = Vector1Vs1RdMaskConstructor.subst(iop)
     exec_output = Vector1Vs1RdMaskExecute.subst(iop)
-    decode_block = VectorMaskDecodeBlock.subst(iop)
+    decode_block = Vector1Vs1RdMaskDecodeBlock.subst(iop)
 }};
 
 def format VectorNonSplitFormat(code, category, *flags) {{
@@ -1278,7 +1278,7 @@ def format VectorMaskFormat(code, category, *flags) {{
     header_output = VectorMaskDeclare.subst(iop)
     decoder_output = VectorMaskConstructor.subst(iop)
     exec_output = VectorMaskExecute.subst(iop)
-    decode_block = VectorMaskDecodeBlock.subst(iop)
+    decode_block = VectorMaskLogicalDecodeBlock.subst(iop)
 }};
 
 def format VectorReduceIntFormat(code, category, *flags) {{

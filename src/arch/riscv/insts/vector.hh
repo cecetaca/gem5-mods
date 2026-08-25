@@ -920,6 +920,12 @@ class VecToScalarCollectMicroInst : public RiscvMicroInst
 StaticInstPtr makeVecOffloadNonSplit(ExtMachInst emi, const char *mnem,
                                      uint32_t elen, uint32_t vlen);
 
+// Mask-logical ops (vmand.mm and the rest of that family). OPMVV like
+// vmv.x.s, but their destination is a vector (mask) register rather
+// than a scalar one, so they cannot take makeVecOffloadNonSplit's OPMVV
+// case; they are a plain record with a vector destination.
+StaticInstPtr makeVecOffloadMaskLogical(ExtMachInst emi, const char *mnem);
+
 // Vector memory offload (phase 1): non-speculative, read+write barrier,
 // blocks at the ROB head for the whole transfer (gem5 owns all memory
 // accesses; ACT only consumes/produces the data).

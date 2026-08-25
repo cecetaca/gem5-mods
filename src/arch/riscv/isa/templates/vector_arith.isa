@@ -1620,6 +1620,31 @@ return new %(class_name)s<uint8_t>(machInst, elen, vlen);
 
 }};
 
+// vcpop.m / vfirst.m: OPMVV reading a mask register into a SCALAR
+// register, so they take the same vector-to-scalar path as vmv.x.s.
+// Without this they would execute natively while offload is active,
+// reading gem5's own vector registers -- which offloaded instructions
+// never write -- and silently returning a count of zero.
+def template Vector1Vs1RdMaskDecodeBlock {{
+
+if (vecOffloadActive()) {
+    return makeVecOffloadNonSplit(machInst, "%(mnemonic)s", elen, vlen);
+}
+return new %(class_name)s<uint8_t>(machInst, elen, vlen);
+
+}};
+
+// vmand.mm and the rest of the mask-logical family: mask sources, mask
+// destination, no scalar operand.
+def template VectorMaskLogicalDecodeBlock {{
+
+if (vecOffloadActive()) {
+    return makeVecOffloadMaskLogical(machInst, "%(mnemonic)s");
+}
+return new %(class_name)s<uint8_t>(machInst, elen, vlen);
+
+}};
+
 def template VectorNonSplitDeclare {{
 
 template<typename ElemType>

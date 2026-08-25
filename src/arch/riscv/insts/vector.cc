@@ -1364,6 +1364,14 @@ makeVecOffloadNonSplit(ExtMachInst emi, const char *mnem, uint32_t elen,
     }
 }
 
+StaticInstPtr
+makeVecOffloadMaskLogical(ExtMachInst emi, const char *mnem)
+{
+    // vmand.mm / vmor.mm / vmnand.mm and friends: OPMVV, both sources
+    // and the destination are mask registers, no scalar operand.
+    return new VecOffloadNonSplitInst(emi, mnem);
+}
+
 VecOffloadMemMicroInst::VecOffloadMemMicroInst(ExtMachInst _machInst,
     const char *mnem, uint32_t _elen, uint32_t _vlen, bool _isStore,
     VecMemMode _mode)
