@@ -1317,6 +1317,15 @@ VecToScalarCollectMicroInst::completeAcc(PacketPtr pkt, ExecContext *xc,
             // NaN-box a 32-bit result in the 64-bit f-register
             val |= 0xffffffff00000000ULL;
         }
+    } else if (rec.vfunct6 == 0x10 && (rec.vs1 == 16 || rec.vs1 == 17)) {
+        // vcpop.m and vfirst.m share funct6 0x10 with vmv.x.s and are
+        // told apart by the vs1 sub-opcode. Their results are COUNTS
+        // and INDICES -- XLEN-wide by definition, not SEW-wide -- so
+        // the sign extension below must not touch them. It silently
+        // corrupted vcpop: a population count of 140 came back as
+        // -116, but only once a single vcpop could see 128 or more set
+        // bits, which needs a long vector. At VLEN=512 no chunk ever
+        // held that many, so every short-vector test passed.
     } else {
         // vmv.x.s sign-extends the SEW-wide element into the x-register
         // (upstream reads vs2 through its *signed* typed view). The ACT
