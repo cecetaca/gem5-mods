@@ -1460,7 +1460,11 @@ VecOffloadMemMicroInst::VecOffloadMemMicroInst(ExtMachInst _machInst,
     // for mem ops funct3 carries the raw width bits; vd doubles as vs3
     // for stores
     rec.funct3 = _machInst.width;
-    if (mode == VecMemMode::Whole) {
+    if (mode == VecMemMode::Mask) {
+        rec.funct3 = 0;              // EEW=8
+        rec.vm = 1;
+        rec.vl = (_machInst.vl + 7) / 8;   // bytes, not elements
+    } else if (mode == VecMemMode::Whole) {
         // A whole-register transfer is nf * VLENB bytes and ignores
         // vtype entirely, so describe it to the external unit as a
         // unit-stride byte move: EEW=8 (funct3 encoding 0), unmasked,
@@ -1506,7 +1510,7 @@ VecOffloadMemMicroInst::commitBlocked(uint64_t seqNum,
     uint64_t stride = (mode == VecMemMode::Strided)
         ? tc->getReg(intRegClass[machInst.rs2]) : 0;
     VecOffloadRecord m = rec;
-    if (mode != VecMemMode::Whole) {
+    if (mode != VecMemMode::Whole && mode != VecMemMode::Mask) {
         refreshVConf(m, tc);
     }
     return VecOffload::backend->vecMemBlocked(seqNum, m, tc, base,
@@ -1575,7 +1579,11 @@ VecMemIssueMicroInst::VecMemIssueMicroInst(ExtMachInst _machInst,
 
     rec = buildVecOffloadRecord(_machInst);
     rec.funct3 = _machInst.width;
-    if (mode == VecMemMode::Whole) {
+    if (mode == VecMemMode::Mask) {
+        rec.funct3 = 0;              // EEW=8
+        rec.vm = 1;
+        rec.vl = (_machInst.vl + 7) / 8;   // bytes, not elements
+    } else if (mode == VecMemMode::Whole) {
         // A whole-register transfer is nf * VLENB bytes and ignores
         // vtype entirely, so describe it to the external unit as a
         // unit-stride byte move: EEW=8 (funct3 encoding 0), unmasked,
@@ -1623,10 +1631,11 @@ VecMemIssueMicroInst::execute(ExecContext *xc,
     uint64_t stride =
         (mode == VecMemMode::Strided) ? xc->getRegOperand(this, 1) : 0;
     VecOffloadRecord m = rec;
-    if (mode != VecMemMode::Whole) {
-        // Whole-register transfers deliberately carry a byte count in
-        // vl and ignore vtype, so they must NOT be refreshed from the
-        // CSRs -- that is the one record whose vl is not architectural.
+    if (mode != VecMemMode::Whole && mode != VecMemMode::Mask) {
+        // Whole-register and mask transfers deliberately carry a BYTE
+        // COUNT in vl and ignore vtype, so they must NOT be refreshed
+        // from the CSRs: doing so replaces the byte count with the
+        // element count and the unit transfers eight times too much.
         refreshVConf(m, xc->tcBase());
     }
     VecOffload::backend->vecMemIssue(m, xc->tcBase(), base, stride,

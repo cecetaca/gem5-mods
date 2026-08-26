@@ -62,6 +62,13 @@ enum class VecMemMode : uint8_t
     // vl and EEW cannot come from vtype: the transfer is always
     // nf * VLENB bytes.
     Whole = 5,
+    // vlm.v / vsm.v: load or store a MASK register as ceil(vl/8) bytes.
+    // Like Whole it ignores vtype's SEW, but its length is neither vl
+    // elements nor a whole register -- it is the mask's byte count.
+    // Our VRF keeps mask bits contiguously from the register's bit 0,
+    // so a unit-stride byte transfer of those low bytes is exactly the
+    // architectural definition.
+    Mask = 6,
 };
 
 enum VecOffloadOpClass : uint8_t

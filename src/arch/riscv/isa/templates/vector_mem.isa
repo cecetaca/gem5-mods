@@ -474,8 +474,17 @@ def template VlmConstructor {{
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
-    panic_if(vecOffloadActive(),
-             "%(mnemonic)s: unsupported with vector_offload (phase 1)");
+    if (vecOffloadActive()) {
+        // vlm.v / vsm.v: the mask register as ceil(vl/8) bytes
+        for (auto &vm_uop : makeVecOffloadMemMicroops(
+                 _machInst, "%(mnemonic)s", this->elen, this->vlen,
+                 false, VecMemMode::Mask)) {
+            this->microops.push_back(vm_uop);
+        }
+        this->microops.front()->setFirstMicroop();
+        this->microops.back()->setLastMicroop();
+        return;
+    }
 
     int32_t micro_vl = (this->vl + 7) / 8;
     StaticInstPtr microop;
@@ -503,8 +512,17 @@ def template VsmConstructor {{
 {
     %(set_reg_idx_arr)s;
     %(constructor)s;
-    panic_if(vecOffloadActive(),
-             "%(mnemonic)s: unsupported with vector_offload (phase 1)");
+    if (vecOffloadActive()) {
+        // vlm.v / vsm.v: the mask register as ceil(vl/8) bytes
+        for (auto &vm_uop : makeVecOffloadMemMicroops(
+                 _machInst, "%(mnemonic)s", this->elen, this->vlen,
+                 true, VecMemMode::Mask)) {
+            this->microops.push_back(vm_uop);
+        }
+        this->microops.front()->setFirstMicroop();
+        this->microops.back()->setLastMicroop();
+        return;
+    }
 
     int32_t micro_vl = (this->vl + 7) / 8;
 
