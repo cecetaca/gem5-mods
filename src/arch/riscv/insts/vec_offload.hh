@@ -154,6 +154,13 @@ struct VecOffload
     // decoupled vector memory (retire at issue + address-range
     // interlock) vs the blocking A/B baseline
     static bool decoupledMem;
+    // Read the offload record's vl/vtype from committed MiscReg storage
+    // rather than from the PCState. Needed on MinorCPU, where the
+    // PCState copy is unreliable after a trimming vsetvl; WRONG on O3,
+    // where a younger vsetvl can execute speculatively and update the
+    // storage before an older offload micro-op commits. The config sets
+    // it per CPU model.
+    static bool vconfFromStorage;
     static VecOffloadBackend *backend;
 };
 

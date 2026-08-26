@@ -964,6 +964,7 @@ VPinVdMicroInst::generateDisassembly(Addr pc,
 
 bool VecOffload::enabled = false;
 bool VecOffload::decoupledMem = true;
+bool VecOffload::vconfFromStorage = false;
 VecOffloadBackend *VecOffload::backend = nullptr;
 
 VecOffloadMicroInst::VecOffloadMicroInst(ExtMachInst _machInst,
@@ -1052,6 +1053,61 @@ VecOffloadMicroInst::execute(ExecContext *xc,
     return NoFault;
 }
 
+
+namespace {
+
+// vl and vtype are ARCHITECTURAL state, but the offload record captures
+// them when the instruction is CONSTRUCTED, i.e. at decode. The
+// decoder's own copy is refreshed only when it is handed a PCState
+// carrying new_vconf, and on MinorCPU that does not reliably reach it
+// for every instruction after a vsetvl -- a correctly-predicted branch
+// does not redirect fetch, so the decoder keeps the vl it had.
+//
+// The failure is silent and specific: a strip-mined loop whose vl never
+// changes is fine, and the short FINAL chunk is not. The unit then
+// operates on VLMAX elements instead of the trimmed count, reading
+// whatever the register still held past the end of the chunk. It took a
+// per-chunk population count to see it -- the totals looked plausible
+// because every element still landed in some bin.
+//
+// Reading the CSRs where the record is issued removes the dependence on
+// decode-time capture entirely. These micro-ops are non-speculative and
+// issue at the commit point, so the architectural values are exactly
+// the ones the instruction must use.
+void
+refreshVConf(VecOffloadRecord &r, ThreadContext *tc)
+{
+    // Where the authoritative vl/vtype live depends on the CPU model.
+    //
+    // The plain read derives them from the PCState, which is correct on
+    // O3 and stale on Minor after a trimming vsetvl (the decoder's copy
+    // oscillates when a line fetched before the redirect is decoded
+    // after it). vsetvl therefore also records the configuration in
+    // MiscReg storage, which advances only when a vsetvl EXECUTES.
+    //
+    // That storage is right on Minor, where execute IS commit, and
+    // WRONG on O3, where a younger vsetvl can execute speculatively and
+    // overwrite it before an older offload micro-op commits -- which
+    // showed up immediately as every record carrying the last vsetvl's
+    // configuration instead of its own.
+    uint32_t vl_raw; RegVal vt_raw;
+    if (VecOffload::vconfFromStorage) {
+        vl_raw = (uint32_t)tc->readMiscRegNoEffect(MISCREG_VL);
+        vt_raw = tc->readMiscRegNoEffect(MISCREG_VTYPE);
+    } else {
+        vl_raw = (uint32_t)tc->readMiscReg(MISCREG_VL);
+        vt_raw = tc->readMiscReg(MISCREG_VTYPE);
+    }
+    r.vl = vl_raw;
+    VTYPE vt = vt_raw;
+    r.vsew = vt.vsew;
+    r.vlmul = vt.vlmul;
+    r.vta = vt.vta;
+    r.vma = vt.vma;
+}
+
+} // anonymous namespace
+
 bool
 VecOffloadMicroInst::commitOffload(uint64_t seqNum, ThreadContext *tc) const
 {
@@ -1062,6 +1118,7 @@ VecOffloadMicroInst::commitOffload(uint64_t seqNum, ThreadContext *tc) const
         return false;  // bounded queue: stall at the head and retry
     }
     VecOffloadRecord r = rec;
+    refreshVConf(r, tc);
     r.vstart = 0;
     if (scalarSrc == 1) {
         r.scalar = tc->getReg(intRegClass[machInst.rs1]);
@@ -1166,6 +1223,7 @@ VecOffloadNonSplitInst::commitOffload(uint64_t seqNum,
         return false;
     }
     VecOffloadRecord r = rec;
+    refreshVConf(r, tc);
     if (scalarSrc == 1) {
         r.scalar = tc->getReg(intRegClass[machInst.rs1]);
     } else if (scalarSrc == 2) {
@@ -1241,7 +1299,9 @@ VecToScalarQueryMicroInst::execute(ExecContext *xc,
             "vector_offload: vstart != 0 unsupported (phase 1)",
             machInst);
     }
-    VecOffload::backend->v2sIssueQuery(rec);
+    VecOffloadRecord q = rec;
+    refreshVConf(q, xc->tcBase());
+    VecOffload::backend->v2sIssueQuery(q);
     // dummy write to release the dependence chain
     vreg_t &d = *(vreg_t *)xc->getWritableRegOperand(this, 0);
     d.zero();
@@ -1445,7 +1505,11 @@ VecOffloadMemMicroInst::commitBlocked(uint64_t seqNum,
     uint64_t base = tc->getReg(intRegClass[machInst.rs1]);
     uint64_t stride = (mode == VecMemMode::Strided)
         ? tc->getReg(intRegClass[machInst.rs2]) : 0;
-    return VecOffload::backend->vecMemBlocked(seqNum, rec, tc, base,
+    VecOffloadRecord m = rec;
+    if (mode != VecMemMode::Whole) {
+        refreshVConf(m, tc);
+    }
+    return VecOffload::backend->vecMemBlocked(seqNum, m, tc, base,
                                               stride, isStore, mode);
 }
 
@@ -1558,7 +1622,14 @@ VecMemIssueMicroInst::execute(ExecContext *xc,
     uint64_t base = xc->getRegOperand(this, 0);
     uint64_t stride =
         (mode == VecMemMode::Strided) ? xc->getRegOperand(this, 1) : 0;
-    VecOffload::backend->vecMemIssue(rec, xc->tcBase(), base, stride,
+    VecOffloadRecord m = rec;
+    if (mode != VecMemMode::Whole) {
+        // Whole-register transfers deliberately carry a byte count in
+        // vl and ignore vtype, so they must NOT be refreshed from the
+        // CSRs -- that is the one record whose vl is not architectural.
+        refreshVConf(m, xc->tcBase());
+    }
+    VecOffload::backend->vecMemIssue(m, xc->tcBase(), base, stride,
                                      isStore, mode);
     return NoFault;
 }

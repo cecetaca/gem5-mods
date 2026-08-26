@@ -181,6 +181,36 @@ def template VConfExecute {{
         %(write_code)s;
 
         %(op_wb)s;
+
+        // gem5 keeps the ARCHITECTURAL vl/vtype in the PCState --
+        // readMiscReg(MISCREG_VL) just returns tc->pcState().vl(), and
+        // the `VL = new_vl` write above lands in storage nothing reads.
+        // Upstream publishes the new config only from branchTarget(),
+        // which MinorCPU never calls; Minor instead rebuilds the
+        // thread's PCState from each instruction's FETCH-time PCState,
+        // which carries the decoder's copy. So without this write the
+        // new vl is discarded by the very next instruction to commit.
+        PCState pc;
+        set(pc, xc->pcState());
+        pc.vtype(new_vtype);
+        pc.vl(new_vl);
+        pc.new_vconf(true);
+        xc->pcState(pc);
+
+        // ...and ALSO into real MiscReg storage. RISC-V in gem5 keeps
+        // no storage for vl -- readMiscReg(MISCREG_VL) derives it from
+        // the PCState -- so there is nowhere to look that a stale
+        // fetch-time PCState cannot poison. On Minor the decoder's
+        // copy demonstrably oscillates after a trimming vsetvl (a line
+        // fetched before the redirect reinstates the old value when it
+        // is decoded after it), and every consumer inherits that.
+        //
+        // These two writes give the offload path a source that only
+        // moves when a vsetvl EXECUTES, which on Minor is the commit
+        // point, and therefore advances in program order.
+        tc->setMiscRegNoEffect(MISCREG_VL, new_vl);
+        tc->setMiscRegNoEffect(MISCREG_VTYPE, (RegVal)new_vtype);
+
         return NoFault;
     }
 }};

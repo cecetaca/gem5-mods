@@ -105,6 +105,13 @@ class RiscvISA(BaseISA):
         "Requires a registered VecOffloadBackend (see "
         "arch/riscv/insts/vec_offload.hh).",
     )
+    vector_offload_vconf_storage = Param.Bool(
+        False,
+        "Read the offload record's vl/vtype from committed MiscReg "
+        "storage instead of the PCState. Set this on MinorCPU, where "
+        "the PCState copy is unreliable after a trimming vsetvl. Leave "
+        "False on O3, where speculative execution of a younger vsetvl "
+        "would make the storage wrong.")
     vector_offload_decoupled_mem = Param.Bool(
         True,
         "Decoupled vector memory: vector loads/stores retire once "
