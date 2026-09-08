@@ -58,10 +58,23 @@ class RiscvVectorLength(UInt32):
     def _check(self):
         super()._check()
 
-        # VLEN needs to be a whole power of 2. We already know value is
-        # not zero. Hence:
-        if self.value & (self.value - 1) != 0:
-            raise TypeError("VLEN is not a power of 2: %d" % self.value)
+        # The RVV spec requires VLEN to be a power of 2, and for a real
+        # implementation this check is right. It is relaxed here for one
+        # specific modelling purpose: an associative processor's vector
+        # length is its LANE COUNT, which is set by area and power
+        # budget rather than by a shift amount. The power-matched CAPE /
+        # FastAP design point is 5,760 fp32 lanes = VLEN 184,320, and
+        # rounding that to 131,072 or 262,144 would compare a different
+        # machine than the one being modelled.
+        #
+        # Only VLEN is relaxed. ELEN below keeps the check, and vlmax
+        # (VLEN/SEW*LMUL) stays exact because 184320 is divisible by 64;
+        # a VLEN that is not a multiple of ELEN is still rejected.
+        if self.value % 64 != 0:
+            raise TypeError(
+                "VLEN must be a multiple of 64 (got %d): a non-power-of-2 "
+                "VLEN is permitted for lane-count modelling, but it must "
+                "still divide evenly by the widest element" % self.value)
 
 
 class RiscvVectorElementLength(UInt32):

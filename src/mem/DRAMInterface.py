@@ -70,6 +70,14 @@ class DRAMInterface(MemInterface):
     # performance being lower when enabled
     enable_dram_powerdown = Param.Bool(False, "Enable powerdown states")
 
+    # DRAMPower energy accounting is pure bookkeeping -- it only writes
+    # the *Energy stats and never feeds timing. It is also brutally
+    # expensive: calcWindowEnergy runs on EVERY refresh and is O(commands
+    # in the window), which measured 97% of host time (84% in the energy
+    # model alone) on memory-heavy gem5-act runs. Off = identical timing,
+    # no energy stats, orders of magnitude faster simulation.
+    enable_power_model = Param.Bool(True, "Compute DRAMPower energy stats")
+
     # For power modelling we need to know if the DRAM has a DLL or not
     dll = Param.Bool(True, "DRAM has DLL or not")
 

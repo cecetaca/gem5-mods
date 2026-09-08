@@ -548,6 +548,12 @@ class DRAMInterface : public MemInterface
     /** Enable or disable DRAM powerdown states. */
     bool enableDRAMPowerdown;
 
+    /* DRAMPower energy accounting is bookkeeping only -- it writes the
+       *Energy stats and never feeds timing. calcWindowEnergy runs on
+       every refresh and is O(commands in window): 97% of host time on
+       memory-heavy runs. False = identical timing, no energy stats. */
+    bool enablePowerModel;
+
     /** The time when stats were last reset used to calculate average power */
     Tick lastStatsResetTick;
 

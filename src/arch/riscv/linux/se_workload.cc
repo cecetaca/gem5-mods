@@ -596,6 +596,12 @@ SyscallDescTable<SEWorkload::SyscallABI64> EmuLinux::syscallDescs64 = {
     {62, "lseek", lseekFunc<RiscvLinux64>},
     {63, "read", readFunc<RiscvLinux64>},
     {64, "write", writeFunc<RiscvLinux64>},
+    // readv (65) was simply missing from this table while its
+    // sibling writev (66) was present; gem5 has carried the
+    // generic readvFunc implementation all along. Without it a
+    // guest that reads through libstdc++'s filebuf dies with
+    // "Syscall 65 out of range" partway through its output.
+    {65, "readv", readvFunc<RiscvLinux64>},
     {66, "writev", writevFunc<RiscvLinux64>},
     {67, "pread64", pread64Func<RiscvLinux64>},
     {68, "pwrite64", pwrite64Func<RiscvLinux64>},
@@ -963,6 +969,12 @@ SyscallDescTable<SEWorkload::SyscallABI32> EmuLinux::syscallDescs32 = {
     {62, "lseek", lseekFunc<RiscvLinux32>},
     {63, "read", readFunc<RiscvLinux32>},
     {64, "write", writeFunc<RiscvLinux32>},
+    // readv (65) was simply missing from this table while its
+    // sibling writev (66) was present; gem5 has carried the
+    // generic readvFunc implementation all along. Without it a
+    // guest that reads through libstdc++'s filebuf dies with
+    // "Syscall 65 out of range" partway through its output.
+    {65, "readv", readvFunc<RiscvLinux32>},
     {66, "writev", writevFunc<RiscvLinux32>},
     {67, "pread64", pread64Func<RiscvLinux32>},
     {68, "pwrite64", pwrite64Func<RiscvLinux32>},

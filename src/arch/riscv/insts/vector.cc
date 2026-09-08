@@ -1074,6 +1074,25 @@ namespace {
 // decode-time capture entirely. These micro-ops are non-speculative and
 // issue at the commit point, so the architectural values are exactly
 // the ones the instruction must use.
+// Where the authoritative vl/vtype live depends on the CPU model; see
+// the note in refreshVConf for why the two models must read different
+// storage.
+uint32_t
+readArchVl(ThreadContext *tc)
+{
+    return VecOffload::vconfFromStorage
+        ? (uint32_t)tc->readMiscRegNoEffect(MISCREG_VL)
+        : (uint32_t)tc->readMiscReg(MISCREG_VL);
+}
+
+RegVal
+readArchVtype(ThreadContext *tc)
+{
+    return VecOffload::vconfFromStorage
+        ? tc->readMiscRegNoEffect(MISCREG_VTYPE)
+        : tc->readMiscReg(MISCREG_VTYPE);
+}
+
 void
 refreshVConf(VecOffloadRecord &r, ThreadContext *tc)
 {
@@ -1090,20 +1109,32 @@ refreshVConf(VecOffloadRecord &r, ThreadContext *tc)
     // overwrite it before an older offload micro-op commits -- which
     // showed up immediately as every record carrying the last vsetvl's
     // configuration instead of its own.
-    uint32_t vl_raw; RegVal vt_raw;
-    if (VecOffload::vconfFromStorage) {
-        vl_raw = (uint32_t)tc->readMiscRegNoEffect(MISCREG_VL);
-        vt_raw = tc->readMiscRegNoEffect(MISCREG_VTYPE);
-    } else {
-        vl_raw = (uint32_t)tc->readMiscReg(MISCREG_VL);
-        vt_raw = tc->readMiscReg(MISCREG_VTYPE);
-    }
-    r.vl = vl_raw;
-    VTYPE vt = vt_raw;
+    r.vl = readArchVl(tc);
+    VTYPE vt = readArchVtype(tc);
     r.vsew = vt.vsew;
     r.vlmul = vt.vlmul;
     r.vta = vt.vta;
     r.vma = vt.vma;
+}
+
+// A mask transfer (vlm.v/vsm.v) moves ceil(vl/8) BYTES, and that byte
+// count is computed at decode -- so it goes stale on Minor for exactly
+// the reason above, and skipping the refresh to protect the byte count
+// preserves the staleness instead of fixing it.
+//
+// The symptom is a short store: a 4096-element mask writes the 49 bytes
+// some earlier, shorter vsetvl called for and leaves the remaining 463
+// untouched, so a scan of the stored mask silently misses every match
+// past the first 392 elements. reverse_index's dedup walk is built on
+// exactly that scan, and answered 9800 unique links against a true
+// 8347 -- every miss appending a duplicate.
+//
+// Whole-register transfers need no equivalent: their byte count is
+// nf*VLENB, which does not depend on vl at all.
+void
+refreshMaskVConf(VecOffloadRecord &r, ThreadContext *tc)
+{
+    r.vl = (readArchVl(tc) + 7) / 8;
 }
 
 } // anonymous namespace
@@ -1510,7 +1541,9 @@ VecOffloadMemMicroInst::commitBlocked(uint64_t seqNum,
     uint64_t stride = (mode == VecMemMode::Strided)
         ? tc->getReg(intRegClass[machInst.rs2]) : 0;
     VecOffloadRecord m = rec;
-    if (mode != VecMemMode::Whole && mode != VecMemMode::Mask) {
+    if (mode == VecMemMode::Mask) {
+        refreshMaskVConf(m, tc);
+    } else if (mode != VecMemMode::Whole) {
         refreshVConf(m, tc);
     }
     return VecOffload::backend->vecMemBlocked(seqNum, m, tc, base,
@@ -1631,11 +1664,14 @@ VecMemIssueMicroInst::execute(ExecContext *xc,
     uint64_t stride =
         (mode == VecMemMode::Strided) ? xc->getRegOperand(this, 1) : 0;
     VecOffloadRecord m = rec;
-    if (mode != VecMemMode::Whole && mode != VecMemMode::Mask) {
-        // Whole-register and mask transfers deliberately carry a BYTE
-        // COUNT in vl and ignore vtype, so they must NOT be refreshed
-        // from the CSRs: doing so replaces the byte count with the
-        // element count and the unit transfers eight times too much.
+    if (mode == VecMemMode::Mask) {
+        // A mask transfer carries ceil(vl/8) BYTES: refreshed, but as a
+        // byte count. A plain refresh would install the element count
+        // and transfer eight times too much.
+        refreshMaskVConf(m, xc->tcBase());
+    } else if (mode != VecMemMode::Whole) {
+        // Whole-register transfers carry nf*VLENB bytes and ignore
+        // vtype entirely, so there is nothing to refresh.
         refreshVConf(m, xc->tcBase());
     }
     VecOffload::backend->vecMemIssue(m, xc->tcBase(), base, stride,

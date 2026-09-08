@@ -657,6 +657,7 @@ DRAMInterface::DRAMInterface(const DRAMInterfaceParams &_p)
       maxAccessesPerRow(_p.max_accesses_per_row),
       timeStampOffset(0), activeRank(0),
       enableDRAMPowerdown(_p.enable_dram_powerdown),
+      enablePowerModel(_p.enable_power_model),
       lastStatsResetTick(0),
       stats(*this)
 {
@@ -1216,9 +1217,11 @@ DRAMInterface::Rank::flushCmdList()
          Command cmd = *next_iter;
          if (cmd.timeStamp <= curTick()) {
              // Move all commands at or before curTick to DRAMPower
-             power.powerlib.doCommand(cmd.type, cmd.bank,
-                                      divCeil(cmd.timeStamp, dram.tCK) -
-                                      dram.timeStampOffset);
+             if (dram.enablePowerModel) {
+                 power.powerlib.doCommand(cmd.type, cmd.bank,
+                                          divCeil(cmd.timeStamp, dram.tCK) -
+                                          dram.timeStampOffset);
+             }
          } else {
              // done - found all commands at or before curTick()
              // next_iter references the 1st command after curTick
@@ -1767,8 +1770,18 @@ void
 DRAMInterface::Rank::updatePowerStats()
 {
     // All commands up to refresh have completed
-    // flush cmdList to DRAMPower
+    // flush cmdList to DRAMPower  (still drains the list when the energy
+    // model is off -- doCommand is guarded inside, but cmdList MUST be
+    // consumed or it grows without bound)
     flushCmdList();
+
+    if (!dram.enablePowerModel) {
+        // Energy accounting off. Nothing below influences timing: it
+        // computes the *Energy/*Power stats only. calcWindowEnergy runs
+        // on every refresh and is O(commands in window) -- 97% of host
+        // time on memory-heavy runs.
+        return;
+    }
 
     // Call the function that calculates window energy at intermediate update
     // events like at refresh, stats dump as well as at simulation exit.
